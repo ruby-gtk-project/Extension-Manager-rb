@@ -1,0 +1,10 @@
+module Extension
+  module Manager
+    module Rb
+      module Version
+        VERSION: String
+      end
+      VERSION: String
+    end
+  end
+end
