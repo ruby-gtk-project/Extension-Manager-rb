@@ -17,6 +17,7 @@ require 'rating'
 require 'install_button'
 require 'comment_tile'
 require 'extension_error_dialog'
+require 'error_dialog'
 require 'shortcuts_dialog'
 require 'confirm_dialogs'
 require 'primary_menu'
@@ -26,11 +27,15 @@ app = ExtensionManager::Application.new
 GtkDriver.drive(app, shots: 'tmp/shots') do |d, application|
   d.window { application.window }
 
+  window = nil
+
+  d.step('window handle') { window = application.window }
+
   d.step('window is up') do
     d.check('window present') { application.window.visible? }
     d.check('stack has both pages') do
-      !application.main_stack.get_child_by_name('app').nil? &&
-        !application.main_stack.get_child_by_name('noshell').nil?
+      !window.main_stack.get_child_by_name('app').nil? &&
+        !window.main_stack.get_child_by_name('noshell').nil?
     end
     d.shot('01-start')
   end
@@ -58,23 +63,23 @@ GtkDriver.drive(app, shots: 'tmp/shots') do |d, application|
   end
 
   d.step('groups bound') do
-    page = application.installed_page
+    page = window.installed_page
     d.check('one user row') { page.user_model.n_items == 1 }
     d.check('one system row') { page.system_model.n_items == 1 }
     d.check('user row built') { page.user_prefs_group.get_row(0).is_a?(ExtensionRow) }
     d.check('row title') { page.user_prefs_group.get_row(0).title == 'Alpha' }
-    application.main_stack.visible_child_name = 'app'
+    window.main_stack.visible_child_name = 'app'
   end
 
   d.step('list renders') do
-    d.check('app page showing') { application.main_stack.visible_child_name == 'app' }
+    d.check('app page showing') { window.main_stack.visible_child_name == 'app' }
     d.check('window mapped') { application.window.mapped? }
     puts "      realized=#{application.window.realized?} size=#{application.window.width}x#{application.window.height}"
     d.shot('02-list')
   end
 
   d.step('search narrows') do
-    page = application.installed_page
+    page = window.installed_page
     page.search_mode_enabled = true
     page.search_query = 'alp'
     d.check('one result') { page.search_model.n_items == 1 }
@@ -86,7 +91,7 @@ GtkDriver.drive(app, shots: 'tmp/shots') do |d, application|
   end
 
   d.step('sort enabled first') do
-    page = application.installed_page
+    page = window.installed_page
     page.sort_enabled_first = true
     d.check('sorted model still has two') { page.sorted_model.n_items == 2 }
     d.check('active first') { page.sorted_model.get_item(0).name == 'Alpha' }
@@ -94,23 +99,24 @@ GtkDriver.drive(app, shots: 'tmp/shots') do |d, application|
   end
 
   d.step('selection mode') do
-    page = application.installed_page
+    page = window.installed_page
     page.selection_mode = true
     d.check('system group hidden') { !page.system_prefs_group.visible? }
     row = page.user_prefs_group.get_row(0)
     d.check('row is selectable') { row.selection_mode? }
     row.select_check.active = true
     d.check('one selected') { page.n_selected == 1 }
-    d.check('uninstall sensitive') { application.uninstall_button.sensitive? }
-    d.check('selection title') { application.window_title.title == '1 Selected' }
+    d.check('uninstall sensitive') { window.uninstall_button.sensitive? }
+    d.check('selection title') { window.window_title.title == '1 Selected' }
+    d.check('title shows the count') { window.title_stack.visible_child_name == 'selection' }
     d.shot('03-selection')
   end
 
   d.step('leave selection mode') do
-    page = application.installed_page
+    page = window.installed_page
     page.selection_mode = false
     d.check('none selected') { page.n_selected.zero? }
-    d.check('title restored') { application.window_title.title == 'Extension Manager' }
+    d.check('title restored') { window.title_stack.visible_child_name == 'switcher' }
   end
 
   d.step('error dialog') do

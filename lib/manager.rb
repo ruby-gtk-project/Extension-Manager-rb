@@ -46,8 +46,18 @@ class Manager
   def on_updates_available(&block) = @updates_callbacks << block
   def on_error(&block) = @error_callbacks << block
   def on_install_status(&block) = @install_callbacks << block
+
+  # Upstream's rows connect to install-status for one install and disconnect
+  # in the handler, so dropping a callback again has to be possible.
+  def off_install_status(block) = @install_callbacks.delete(block)
+
   def on_supported_changed(&block) = @supported_callbacks << block
   def on_extensions_enabled_changed(&block) = @enabled_callbacks << block
+
+  # Upstream's window emits install-status itself when the user refuses the
+  # unsupported-extension warning, so that refusal has to be reportable from
+  # outside the install itself.
+  def report_install_status(state) = notify_install_status(state)
 
   def supported? = @is_supported
 
@@ -282,7 +292,9 @@ class Manager
       @error_callbacks.each { |callback| callback.call(message) }
     end
 
+    # Over a copy: a search row drops its own callback from inside the
+    # handler, which would otherwise be a mutation mid-iteration.
     def notify_install_status(state)
-      @install_callbacks.each { |callback| callback.call(state) }
+      @install_callbacks.dup.each { |callback| callback.call(state) }
     end
 end

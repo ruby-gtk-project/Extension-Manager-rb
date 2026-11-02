@@ -58,8 +58,10 @@ module ConfirmDialogs
   end
 
   # Warns before installing an extension the running shell does not support;
-  # yields when the user installs it anyway.
-  def self.unsupported(parent, &block)
+  # yields when the user installs it anyway, and calls `on_decline` when the
+  # user goes back instead — upstream reports that refusal as an
+  # install-status of UNSUPPORTED, so the caller has to hear about it.
+  def self.unsupported(parent, on_decline: nil, &block)
     alert(UNSUPPORTED_HEADING, UNSUPPORTED_BODY).tap do |dialog|
       dialog.add_response('install', '_Install Anyway')
       dialog.add_response('back', '_Go Back')
@@ -72,6 +74,7 @@ module ConfirmDialogs
         dialog,
         parent,
         'install',
+        on_other: on_decline,
         &block
       )
     end
@@ -93,10 +96,12 @@ module ConfirmDialogs
   # Adw.AlertDialog answers through its `response` signal; the block runs only
   # for the response that means "go ahead", which is what upstream checks for
   # in its adw_alert_dialog_choose_finish callbacks.
-  def self.answer(dialog, parent, affirmative, &block)
+  def self.answer(dialog, parent, affirmative, on_other: nil, &block)
     dialog.signal_connect('response') do |_dialog, response|
       if response == affirmative
         block&.call
+      else
+        on_other&.call
       end
     end
     dialog.present(parent)
