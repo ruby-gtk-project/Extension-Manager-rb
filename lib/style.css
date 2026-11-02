@@ -1,0 +1,67 @@
+.detail {
+  margin: 24px;
+}
+
+.multiline {
+  line-height: 140%;
+}
+
+.tint {
+  /* Dark view_bg_color */
+  background-color: rgb(30 30 30);
+  color: white;
+}
+
+.search-row {
+  padding: 2px;
+}
+
+.version-label {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 99px;
+  padding: 4px 12px;
+}
+
+.version-label.current {
+  background-color: var(--accent-color);
+  color: var(--window-bg-color);
+}
+
+.update {
+  color: #ff7800;
+}
+
+/* Upstream names these two widgets with gtk_widget_class_set_css_name, which
+   a Ruby subclass of Gtk.Widget cannot do, so the port gives each widget the
+   matching style class and the selectors below list both spellings. */
+comment-tile,
+.comment-tile {
+  padding: 16px;
+}
+
+.detail-heading {
+  margin-bottom: 6px;
+}
+
+rating,
+.rating {
+  color: var(--yellow-4);
+}
+
+.author-link link {
+  color: var(--blue-2);
+  text-decoration: none;
+}
+
+.author-badge {
+  background-color: var(--accent-color);
+  border-radius: 999px;
+  color: var(--window-bg-color);
+  margin-left: 6px;
+  padding: 2px 6px;
+}
+
+progressbar text {
+  font-size: 14px;
+  font-weight: bold;
+}
