@@ -1,6 +1,6 @@
 # Extension Manager — upstream component inventory
 
-Survey step. No app code written. Produced with the `component-identification`
+Survey step, re-run against the current `ruby` branch. No app code written. Produced with the `component-identification`
 skill in `.claude/skills/`.
 
 - Upstream ref: **`origin/master`** (not `origin/main` — that ref does not exist
@@ -10,10 +10,11 @@ skill in `.claude/skills/`.
   `>= 1.8.alpha`. 18 `.blp` files, 17 of which are `template` roots backed by a
   `.c` file; `src/exm-shortcuts-dialog.blp` is a standalone root with no backing
   source.
-- Port `lib/` today holds only the generated placeholder: `lib/extension_manager.rb`
-  and `lib/extension_manager/application.rb` (an `Adw.StatusPage` saying the port
-  has not been written), plus `lib/extension/manager/rb/version.rb`. **Zero
-  user-facing components exist yet.**
+- Port `lib/` on `ruby` at `3671464` holds 26 Ruby files (~3.5k lines): the
+  application and its inline window, the whole Installed view, and every model
+  and backend. The Browse half of the app — Browse page, detail view, author
+  page, screenshot viewer, comment and versions dialogs, upgrade assistant,
+  crash reporter — is not written. See **Port status** below.
 
 House shape is taken from the pilot at `../gnome-contacts-rb`: ported components
 live flat as `lib/<thing>.rb` with top-level classes; only the application class
@@ -450,71 +451,107 @@ Fed by `src/exm-backtrace.c` (libbacktrace symbolisation, optional at build time
 
 ## Port status
 
-Nothing in the table above exists in `lib/` on `ruby`. The only Ruby file with
-widgets in it is `lib/extension_manager/application.rb`, the generated
-placeholder — an `Adw.ApplicationWindow` + `Adw.ToolbarView` + `Adw.HeaderBar` +
-`Adw.StatusPage` saying "The Ruby port has not been written yet". It must be
-replaced, not extended.
+Re-surveyed on `ruby` at `3671464` (after `561f223 Port the models, the shell and
+web backends and the Installed view`). The generated placeholder is gone.
 
-Counts: **22 user-facing component units upstream** (1 application, 1 window,
-1 shortcuts dialog, 2 view pages, 1 detail page, 1 author page, 1 screenshot
-page, 5 dialogs, 9 rows/tiles/controls, 3 standalone alert dialogs counted with
-the window) and **0 in the port**.
+**What exists (26 files, ~3.5k lines in `lib/`):**
+
+- the application class, with `app.quit`, `app.about`, `app.logout`,
+  `app.sort-enabled-first`, `app.shortcuts`, the `<primary>q` / `<primary>w`
+  accels and the geometry/settings binding;
+- the main window, but **built inline inside `lib/extension_manager/application.rb`**
+  rather than in its own `lib/window.rb` — the header bar, search bar,
+  selection action bar, `main_stack` and the "GNOME Shell Unavailable" page all
+  live there;
+- the Installed view end to end: `installed_page.rb`, `extension_row.rb`,
+  `extension_toggle.rb`, `install_button.rb`, `rating.rb`, `comment_tile.rb`,
+  `extension_error_dialog.rb`, `confirm_dialogs.rb`, `primary_menu.rb`,
+  `shortcuts_dialog.rb`;
+- every model and backend: `manager.rb`, `extension.rb`,
+  `shell_dbus_interface.rb`, `request_handler.rb` and the five web providers,
+  the five web models, `types.rb`, `utils.rb`, `upgrade_result.rb`,
+  `settings.rb`, `style.css`.
+
+**What is still missing (16 units):** the Browse half of the app and everything
+it reaches —
+
+| Missing | Why it matters |
+|---|---|
+| `lib/browse_page.rb`, `lib/search_row.rb` | the `browse` `Adw.ViewStackPage` has no content at all; `win.search-online` is unreachable |
+| `lib/detail_view.rb` | the extension detail navigation page — the app's largest single component |
+| `lib/screenshot.rb`, `lib/screenshot_view.rb`, `lib/zoom_picture.rb`, `lib/animated_paintable.rb` | the screenshot viewer and its three zoom actions / three key bindings |
+| `lib/author_page.rb` | `win.show-author` |
+| `lib/comment_dialog.rb`, `lib/versions_dialog.rb` | reached from the detail view |
+| `lib/upgrade_assistant.rb` | `win.show-upgrade-assistant`, which the primary menu already points at |
+| `lib/error_dialog.rb`, `lib/backtrace.rb` | the app's own crash reporter |
+| `lib/unified_data.rb` | the object the detail view binds to; local + remote merged |
+| `lib/image_resolver.rb` | icons and screenshots are not fetched yet |
+| `lib/gnome_shell_search_provider.rb` | the GNOME Shell `SearchProvider2` export |
+| `lib/window.rb` | an extraction, not new behaviour — the window tree is in `application.rb` today |
+| `po/` | no catalogue in the port; upstream ships 45 locales |
+
+Counts: **22 user-facing component units upstream**, of which **10 exist** (the
+application, the window-inside-the-application, the primary menu, the three
+alert dialogs, the shortcuts dialog, the installed page, the extension row, the
+install button, the rating, the comment tile, the extension error dialog) and
+**12 do not**. On the support side, **18 of 22** non-widget files are ported.
 
 ## Target file map
 
 | Upstream | Port file | Kind | Exists |
 |---|---|---|---|
-| `src/exm-application.c` | `lib/extension_manager/application.rb` | application (actions, accels, About) | placeholder only |
-| `src/exm-window.blp` + `.c` | `lib/window.rb` | application window | no |
-| `src/exm-window.blp` (`primary_menu`) | `lib/primary_menu.rb` | menu model | no |
-| `src/exm-window.blp` (3 `Adw.AlertDialog` roots) | `lib/confirm_dialogs.rb` | alert dialogs | no |
-| `src/exm-shortcuts-dialog.blp` | `lib/shortcuts_dialog.rb` | shortcuts dialog | no |
-| `src/exm-installed-page.blp` + `.c` | `lib/installed_page.rb` | page | no |
-| `src/exm-extension-row.blp` + `.c` | `lib/extension_row.rb` | list row | no |
-| `src/exm-extension-toggle.c` | `lib/extension_toggle.rb` | behaviour helper | no |
+| `src/exm-application.c` | `lib/extension_manager/application.rb` | application (actions, accels, About) | yes — and it also hosts the window tree |
+| `src/exm-window.blp` + `.c` | `lib/window.rb` | application window | no — the window is built inline in `application.rb`; extract it here |
+| `src/exm-window.blp` (`primary_menu`) | `lib/primary_menu.rb` | menu model | yes |
+| `src/exm-window.blp` (3 `Adw.AlertDialog` roots) | `lib/confirm_dialogs.rb` | alert dialogs | yes |
+| `src/exm-shortcuts-dialog.blp` | `lib/shortcuts_dialog.rb` | shortcuts dialog | yes |
+| `src/exm-installed-page.blp` + `.c` | `lib/installed_page.rb` | page | yes |
+| `src/exm-extension-row.blp` + `.c` | `lib/extension_row.rb` | list row | yes |
+| `src/exm-extension-toggle.c` | `lib/extension_toggle.rb` | behaviour helper | yes |
 | `src/exm-browse-page.blp` + `.c` | `lib/browse_page.rb` | page | no |
 | `src/exm-search-row.blp` + `.c` | `lib/search_row.rb` | list row | no |
-| `src/exm-install-button.blp` + `.c` | `lib/install_button.rb` | control | no |
+| `src/exm-install-button.blp` + `.c` | `lib/install_button.rb` | control | yes |
 | `src/exm-detail-view.blp` + `.c` | `lib/detail_view.rb` | navigation page | no |
 | `src/exm-screenshot.blp` + `.c` | `lib/screenshot.rb` | widget | no |
 | `src/exm-screenshot-view.blp` + `.c` | `lib/screenshot_view.rb` | navigation page | no |
 | `src/exm-zoom-picture.c` | `lib/zoom_picture.rb` | custom-drawn widget | no |
 | `src/exm-animated-paintable.c` | `lib/animated_paintable.rb` | paintable | no |
-| `src/exm-rating.blp` + `.c` | `lib/rating.rb` | widget | no |
-| `src/exm-comment-tile.blp` + `.c` | `lib/comment_tile.rb` | tile | no |
+| `src/exm-rating.blp` + `.c` | `lib/rating.rb` | widget | yes |
+| `src/exm-comment-tile.blp` + `.c` | `lib/comment_tile.rb` | tile | yes |
 | `src/exm-comment-dialog.blp` + `.c` | `lib/comment_dialog.rb` | dialog | no |
 | `src/exm-versions-dialog.blp` + `.c` | `lib/versions_dialog.rb` | dialog | no |
 | `src/exm-upgrade-assistant.blp` + `.c` | `lib/upgrade_assistant.rb` | dialog / assistant | no |
-| `src/exm-extension-error-dialog.blp` + `.c` | `lib/extension_error_dialog.rb` | dialog | no |
+| `src/exm-extension-error-dialog.blp` + `.c` | `lib/extension_error_dialog.rb` | dialog | yes |
 | `src/exm-error-dialog.blp` + `.c` | `lib/error_dialog.rb` | window (crash reporter) | no |
 | `src/exm-author-page.blp` + `.c` | `lib/author_page.rb` | navigation page | no |
 | `src/exm-unified-data.c` | `lib/unified_data.rb` | model | no |
-| `src/exm-upgrade-result.c` | `lib/upgrade_result.rb` | model | no |
-| `src/exm-utils.c` | `lib/utils.rb` | formatters | no |
-| `src/exm-types.h` | `lib/types.rb` | enums | no |
-| `src/local/exm-manager.c` | `lib/manager.rb` | D-Bus shell client | no |
-| `src/local/exm-extension.c` | `lib/extension.rb` | model | no |
-| `src/local/shell-dbus-interface.c` | `lib/shell_dbus_interface.rb` | D-Bus proxy | no |
-| `src/web/exm-request-handler.c` | `lib/request_handler.rb` | HTTP base | no |
-| `src/web/exm-data-provider.c` | `lib/data_provider.rb` | HTTP provider | no |
-| `src/web/exm-search-provider.c` | `lib/search_provider.rb` | HTTP provider | no |
-| `src/web/exm-comment-provider.c` | `lib/comment_provider.rb` | HTTP provider | no |
-| `src/web/exm-versions-provider.c` | `lib/versions_provider.rb` | HTTP provider | no |
-| `src/web/exm-profile-provider.c` | `lib/profile_provider.rb` | HTTP provider | no |
+| `src/exm-upgrade-result.c` | `lib/upgrade_result.rb` | model | yes |
+| `src/exm-utils.c` | `lib/utils.rb` | formatters | yes |
+| `src/exm-types.h` | `lib/types.rb` | enums | yes |
+| `src/local/exm-manager.c` | `lib/manager.rb` | D-Bus shell client | yes |
+| `src/local/exm-extension.c` | `lib/extension.rb` | model | yes |
+| `src/local/shell-dbus-interface.c` | `lib/shell_dbus_interface.rb` | D-Bus proxy | yes |
+| `src/web/exm-request-handler.c` | `lib/request_handler.rb` | HTTP base | yes |
+| `src/web/exm-data-provider.c` | `lib/data_provider.rb` | HTTP provider | yes |
+| `src/web/exm-search-provider.c` | `lib/search_provider.rb` | HTTP provider | yes |
+| `src/web/exm-comment-provider.c` | `lib/comment_provider.rb` | HTTP provider | yes |
+| `src/web/exm-versions-provider.c` | `lib/versions_provider.rb` | HTTP provider | yes |
+| `src/web/exm-profile-provider.c` | `lib/profile_provider.rb` | HTTP provider | yes |
 | `src/web/exm-image-resolver.c` | `lib/image_resolver.rb` | image cache | no |
-| `src/web/model/exm-comment.c` | `lib/comment.rb` | model | no |
-| `src/web/model/exm-search-result.c` | `lib/search_result.rb` | model | no |
-| `src/web/model/exm-shell-versions.c` | `lib/shell_versions.rb` | model | no |
-| `src/web/model/exm-user-profile.c` | `lib/user_profile.rb` | model | no |
-| `src/web/model/exm-version-result.c` | `lib/version_result.rb` | model | no |
+| `src/web/model/exm-comment.c` | `lib/comment.rb` | model | yes |
+| `src/web/model/exm-search-result.c` | `lib/search_result.rb` | model | yes |
+| `src/web/model/exm-shell-versions.c` | `lib/shell_versions.rb` | model | yes |
+| `src/web/model/exm-user-profile.c` | `lib/user_profile.rb` | model | yes |
+| `src/web/model/exm-version-result.c` | `lib/version_result.rb` | model | yes |
 | `src/exm-gnome-shell-search-provider.c` | `lib/gnome_shell_search_provider.rb` | D-Bus search provider | no |
 | `src/exm-backtrace.c` | `lib/backtrace.rb` | crash capture | no |
-| `src/style.css` | `lib/style.css` (loaded by a `Gtk::CssProvider`) | stylesheet | no |
-| `data/…gschema.xml.in` | `lib/settings.rb` | settings | no |
+| `src/style.css` | `lib/style.css` (loaded by a `Gtk::CssProvider`) | stylesheet | yes |
+| `data/…gschema.xml.in` | `lib/settings.rb` | settings | yes |
 | `po/*` | `po/` | translations | no |
 
 ## Blockers and open questions
+
+Carried over from the first survey, with what the last port commit settled.
 
 1. **The upstream ref is `origin/master`, not `origin/main`.** Every instruction
    naming `origin/main` has to be read as `origin/master`; `origin/HEAD` points
@@ -525,7 +562,11 @@ the window) and **0 in the port**.
    read off upstream. No `.c` file mentions `shortcuts`, so the dialog is
    assumed to be auto-loaded by libadwaita from the resource path. Confirm in
    the Ruby port by registering the action explicitly.
-3. **libadwaita `>= 1.8.alpha` is required.** The UI uses `Adw.Spinner`,
+3. **libadwaita `>= 1.8.alpha` is required.** (Partly answered: the ported
+   Installed view and shortcuts dialog work in the dev shell, so
+   `Adw.ShortcutsDialog`, `Adw.SwitchRow` and `dimmed` are available. Still
+   unverified for `Adw.SpinnerPaintable`, `Adw.ButtonRow` and `Adw.WrapBox`,
+   which only the unported assistant and detail view use.) The UI uses `Adw.Spinner`,
    `Adw.SpinnerPaintable`, `Adw.ButtonRow`, `Adw.WrapBox`, `Adw.ShortcutsDialog`,
    `Adw.ShortcutsSection`, `Adw.ShortcutsItem`, `Adw.Breakpoint` setters, the
    `dimmed` style class and `var(--accent-color)` CSS. Whether the Ruby
@@ -548,9 +589,23 @@ the window) and **0 in the port**.
    `glycin-gtk4-2`, `libsoup-3`, `json-glib` and `libxml2`; the Ruby
    equivalents (`net/http`, `json`, `nokogiri`, `GdkPixbuf`) are not in the
    dev shell yet.
-7. **No dev-shell banner was reachable from the ambient shell** — `flake.nix`
-   has no `shellHook` grep hit, so the app / drive / spec commands the task
-   mentions were not read. Confirm them with `nix develop` before the first
-   run.
+7. ~~No dev-shell banner~~ — **resolved.** `flake.nix:208` now has a
+   `shellHook` printing: run the app `xvfb-run ruby exe/extension-manager`,
+   drive it `xvfb-run ruby test/drive_*.rb` (one driver exists,
+   `test/drive_installed.rb`), specs through
+   `RSpec::Core::Runner.run(["--format", "progress", "--require", "spec_helper", "spec"])`.
+   It also exports `RUBYLIB=$PWD/lib` and points `GSETTINGS_SCHEMA_DIR` at
+   `data/schemas` — a directory the port does not have yet, so `settings.rb`
+   must tolerate a missing schema.
 8. **45 locales.** Translation parity is a separate exercise; `po/POTFILES`
    lists 63 upstream files whose strings must all be reachable from the port.
+
+9. **The window has no file of its own.** Every remaining view is reached
+   through a `win.*` action installed on the window, so the next unit either
+   extends `application.rb` further or extracts `lib/window.rb` first. The
+   house shape (one upstream file → one `lib/<thing>.rb`) says extract, and
+   `src/exm-window.blp` + `.c` is 1 upstream unit; doing it before Browse keeps
+   the diff honest.
+10. **`lib/image_resolver.rb` gates three units.** Browse tiles, the detail
+   view and the screenshot view all need resolved remote images, so it is the
+   first thing to port in the Browse half, not the last.
