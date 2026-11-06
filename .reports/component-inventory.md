@@ -10,11 +10,15 @@ skill in `.claude/skills/`.
   `>= 1.8.alpha`. 18 `.blp` files, 17 of which are `template` roots backed by a
   `.c` file; `src/exm-shortcuts-dialog.blp` is a standalone root with no backing
   source.
-- Port `lib/` on `ruby` at `3671464` holds 26 Ruby files (~3.5k lines): the
-  application and its inline window, the whole Installed view, and every model
-  and backend. The Browse half of the app — Browse page, detail view, author
-  page, screenshot viewer, comment and versions dialogs, upgrade assistant,
-  crash reporter — is not written. See **Port status** below.
+- Port `lib/` on `ruby` at `f848dc2` holds 31 component Ruby files (~4.3k
+  lines, excluding the gem-scaffold `lib/extension_manager.rb` and
+  `lib/extension/manager/rb/version.rb`): the application, its own
+  `lib/window.rb`, the whole Installed view, the Browse page and its search
+  row, the image resolver, the crash-reporter dialog, and every model and
+  backend. Still unwritten: the detail view, author page, screenshot viewer,
+  comment/versions dialogs, the upgrade assistant, the crash *capture*
+  (`backtrace.rb`), the GNOME Shell search provider, and `po/`. See
+  **Port status** below.
 
 House shape is taken from the pilot at `../gnome-contacts-rb`: ported components
 live flat as `lib/<thing>.rb` with top-level classes; only the application class
@@ -451,65 +455,80 @@ Fed by `src/exm-backtrace.c` (libbacktrace symbolisation, optional at build time
 
 ## Port status
 
-Re-surveyed on `ruby` at `3671464` (after `561f223 Port the models, the shell and
-web backends and the Installed view`). The generated placeholder is gone.
+Re-surveyed on `ruby` at `f848dc2` (after `f848dc2 Port the window, the Browse
+view, the search row, the image resolver and the crash reporter`, which
+followed `561f223 Port the models, the shell and web backends and the
+Installed view`). The generated placeholder is gone.
 
-**What exists (26 files, ~3.5k lines in `lib/`):**
+**What exists (31 component files, ~4.3k lines in `lib/`):**
 
 - the application class, with `app.quit`, `app.about`, `app.logout`,
   `app.sort-enabled-first`, `app.shortcuts`, the `<primary>q` / `<primary>w`
   accels and the geometry/settings binding;
-- the main window, but **built inline inside `lib/extension_manager/application.rb`**
-  rather than in its own `lib/window.rb` — the header bar, search bar,
-  selection action bar, `main_stack` and the "GNOME Shell Unavailable" page all
-  live there;
+- the main window, now in its own `lib/window.rb` — the header bar, search
+  bar, selection action bar, `main_stack`, the narrow breakpoint, the
+  switcher/selection title stack and the "GNOME Shell Unavailable" page. It
+  installs the `ext.*` group and the `win.*` actions whose views exist
+  (`show-page`, `show-error`, `show-error-dialog`, `search-online`,
+  `search-installed`, `discover-gnome`) plus `<Alt>1` / `<Alt>2`; the actions
+  that need the detail view, author page, screenshot view or upgrade
+  assistant are left uninstalled rather than installed empty;
 - the Installed view end to end: `installed_page.rb`, `extension_row.rb`,
   `extension_toggle.rb`, `install_button.rb`, `rating.rb`, `comment_tile.rb`,
   `extension_error_dialog.rb`, `confirm_dialogs.rb`, `primary_menu.rb`,
   `shortcuts_dialog.rb`;
+- the Browse view's page and row: `browse_page.rb` (search entry with its
+  750 ms delay and random suggestion placeholder, the sort drop-down, the
+  ascending/descending toggle, the spinner/results/no-results/
+  connection-error stack, Load More Results) and `search_row.rb` (release
+  history lookup, compatible-release search, the four button states,
+  `ext.install`);
+- the app's own crash reporter dialog, `error_dialog.rb` (the support log's
+  fields, in upstream's order);
+- `image_resolver.rb`, the icon/screenshot fetch-and-cache layer that gates
+  the Browse tiles, the detail view and the screenshot view;
 - every model and backend: `manager.rb`, `extension.rb`,
   `shell_dbus_interface.rb`, `request_handler.rb` and the five web providers,
   the five web models, `types.rb`, `utils.rb`, `upgrade_result.rb`,
   `settings.rb`, `style.css`.
 
-**What is still missing (16 units):** the Browse half of the app and everything
-it reaches —
+**What is still missing (11 units):**
 
 | Missing | Why it matters |
 |---|---|
-| `lib/browse_page.rb`, `lib/search_row.rb` | the `browse` `Adw.ViewStackPage` has no content at all; `win.search-online` is unreachable |
-| `lib/detail_view.rb` | the extension detail navigation page — the app's largest single component |
+| `lib/detail_view.rb` | the extension detail navigation page — the app's largest single component; `win.show-detail` is unreachable |
 | `lib/screenshot.rb`, `lib/screenshot_view.rb`, `lib/zoom_picture.rb`, `lib/animated_paintable.rb` | the screenshot viewer and its three zoom actions / three key bindings |
 | `lib/author_page.rb` | `win.show-author` |
 | `lib/comment_dialog.rb`, `lib/versions_dialog.rb` | reached from the detail view |
 | `lib/upgrade_assistant.rb` | `win.show-upgrade-assistant`, which the primary menu already points at |
-| `lib/error_dialog.rb`, `lib/backtrace.rb` | the app's own crash reporter |
+| `lib/backtrace.rb` | the crash *capture* behind `error_dialog.rb`, which is now ported but has nothing populating its log yet |
 | `lib/unified_data.rb` | the object the detail view binds to; local + remote merged |
-| `lib/image_resolver.rb` | icons and screenshots are not fetched yet |
 | `lib/gnome_shell_search_provider.rb` | the GNOME Shell `SearchProvider2` export |
-| `lib/window.rb` | an extraction, not new behaviour — the window tree is in `application.rb` today |
 | `po/` | no catalogue in the port; upstream ships 45 locales |
 
-Counts: **22 user-facing component units upstream**, of which **10 exist** (the
-application, the window-inside-the-application, the primary menu, the three
-alert dialogs, the shortcuts dialog, the installed page, the extension row, the
-install button, the rating, the comment tile, the extension error dialog) and
-**12 do not**. On the support side, **18 of 22** non-widget files are ported.
+Counts, from the **Target file map** below (48 upstream-to-port rows,
+widgets and support files together): **35 exist, 13 do not.** The 13 missing
+are `detail_view.rb`, `screenshot.rb`, `screenshot_view.rb`,
+`zoom_picture.rb`, `animated_paintable.rb`, `author_page.rb`,
+`comment_dialog.rb`, `versions_dialog.rb`, `upgrade_assistant.rb` (the
+remaining user-facing units — nine `win.*` destinations), plus
+`unified_data.rb`, `gnome_shell_search_provider.rb` and `backtrace.rb` on the
+support side, and the `po/` catalogue.
 
 ## Target file map
 
 | Upstream | Port file | Kind | Exists |
 |---|---|---|---|
 | `src/exm-application.c` | `lib/extension_manager/application.rb` | application (actions, accels, About) | yes — and it also hosts the window tree |
-| `src/exm-window.blp` + `.c` | `lib/window.rb` | application window | no — the window is built inline in `application.rb`; extract it here |
+| `src/exm-window.blp` + `.c` | `lib/window.rb` | application window | yes — extracted out of `application.rb` |
 | `src/exm-window.blp` (`primary_menu`) | `lib/primary_menu.rb` | menu model | yes |
 | `src/exm-window.blp` (3 `Adw.AlertDialog` roots) | `lib/confirm_dialogs.rb` | alert dialogs | yes |
 | `src/exm-shortcuts-dialog.blp` | `lib/shortcuts_dialog.rb` | shortcuts dialog | yes |
 | `src/exm-installed-page.blp` + `.c` | `lib/installed_page.rb` | page | yes |
 | `src/exm-extension-row.blp` + `.c` | `lib/extension_row.rb` | list row | yes |
 | `src/exm-extension-toggle.c` | `lib/extension_toggle.rb` | behaviour helper | yes |
-| `src/exm-browse-page.blp` + `.c` | `lib/browse_page.rb` | page | no |
-| `src/exm-search-row.blp` + `.c` | `lib/search_row.rb` | list row | no |
+| `src/exm-browse-page.blp` + `.c` | `lib/browse_page.rb` | page | yes |
+| `src/exm-search-row.blp` + `.c` | `lib/search_row.rb` | list row | yes |
 | `src/exm-install-button.blp` + `.c` | `lib/install_button.rb` | control | yes |
 | `src/exm-detail-view.blp` + `.c` | `lib/detail_view.rb` | navigation page | no |
 | `src/exm-screenshot.blp` + `.c` | `lib/screenshot.rb` | widget | no |
@@ -522,7 +541,7 @@ install button, the rating, the comment tile, the extension error dialog) and
 | `src/exm-versions-dialog.blp` + `.c` | `lib/versions_dialog.rb` | dialog | no |
 | `src/exm-upgrade-assistant.blp` + `.c` | `lib/upgrade_assistant.rb` | dialog / assistant | no |
 | `src/exm-extension-error-dialog.blp` + `.c` | `lib/extension_error_dialog.rb` | dialog | yes |
-| `src/exm-error-dialog.blp` + `.c` | `lib/error_dialog.rb` | window (crash reporter) | no |
+| `src/exm-error-dialog.blp` + `.c` | `lib/error_dialog.rb` | window (crash reporter) | yes |
 | `src/exm-author-page.blp` + `.c` | `lib/author_page.rb` | navigation page | no |
 | `src/exm-unified-data.c` | `lib/unified_data.rb` | model | no |
 | `src/exm-upgrade-result.c` | `lib/upgrade_result.rb` | model | yes |
@@ -537,7 +556,7 @@ install button, the rating, the comment tile, the extension error dialog) and
 | `src/web/exm-comment-provider.c` | `lib/comment_provider.rb` | HTTP provider | yes |
 | `src/web/exm-versions-provider.c` | `lib/versions_provider.rb` | HTTP provider | yes |
 | `src/web/exm-profile-provider.c` | `lib/profile_provider.rb` | HTTP provider | yes |
-| `src/web/exm-image-resolver.c` | `lib/image_resolver.rb` | image cache | no |
+| `src/web/exm-image-resolver.c` | `lib/image_resolver.rb` | image cache | yes |
 | `src/web/model/exm-comment.c` | `lib/comment.rb` | model | yes |
 | `src/web/model/exm-search-result.c` | `lib/search_result.rb` | model | yes |
 | `src/web/model/exm-shell-versions.c` | `lib/shell_versions.rb` | model | yes |
@@ -600,12 +619,18 @@ Carried over from the first survey, with what the last port commit settled.
 8. **45 locales.** Translation parity is a separate exercise; `po/POTFILES`
    lists 63 upstream files whose strings must all be reachable from the port.
 
-9. **The window has no file of its own.** Every remaining view is reached
-   through a `win.*` action installed on the window, so the next unit either
-   extends `application.rb` further or extracts `lib/window.rb` first. The
-   house shape (one upstream file → one `lib/<thing>.rb`) says extract, and
-   `src/exm-window.blp` + `.c` is 1 upstream unit; doing it before Browse keeps
-   the diff honest.
-10. **`lib/image_resolver.rb` gates three units.** Browse tiles, the detail
-   view and the screenshot view all need resolved remote images, so it is the
-   first thing to port in the Browse half, not the last.
+9. ~~The window has no file of its own~~ — **resolved.** `f848dc2` extracted
+   it into `lib/window.rb`.
+10. ~~`lib/image_resolver.rb` gates three units~~ — **partly resolved.**
+    `f848dc2` ported it, unblocking the Browse tiles. The detail view and the
+    screenshot view still need it when they are written.
+11. **Remaining `win.*`/`ext.*` destinations with no view behind them:**
+    `win.show-detail` (detail view), `win.show-author` (author page),
+    `win.show-screenshot` (screenshot view), `win.show-upgrade-assistant`
+    (upgrade assistant). `window.rb`'s comment at line 26 names these
+    explicitly as installed nowhere yet, rather than installed empty — read
+    it before wiring any of the four.
+12. **`lib/backtrace.rb` is the one piece of the crash reporter still
+    missing.** `error_dialog.rb` is ported and its support log has the right
+    fields in the right order, but nothing populates it from a real crash
+    yet; `src/exm-backtrace.c` is the upstream file to read for that.
