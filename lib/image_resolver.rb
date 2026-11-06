@@ -1,23 +1,30 @@
 # frozen_string_literal: true
 
 require 'adwaita'
+require 'glycin'
+require 'libglycin_gtk4'
+require 'glib2'
+require 'uri'
+require_relative 'animated_paintable'
 require_relative 'request_handler'
 
 # Fetches an image from extensions.gnome.org and decodes it into a paintable.
 #
 # Ported from upstream's src/web/exm-image-resolver.c: the website hands out
 # relative paths ("/static/extension-data/…"), which are resolved against
-# https://extensions.gnome.org/, fetched, and decoded into a GdkPaintable the
-# caller hands straight to a Gtk.Image.
+# https://extensions.gnome.org/, fetched, and decoded through glycin into a
+# GdkPaintable the caller hands straight to a Gtk.Image.
 #
-# Upstream decodes through glycin, which also gives it the frame delay an
-# animated image carries — that delay is what upstream's ExmAnimatedPaintable
-# needs. glycin has no Ruby binding, so the decoding goes through GdkPixbuf
-# here and the result is always a still Gdk::Texture: the first frame of an
-# animation, which is what upstream shows for a delay of zero too.
+# Upstream decodes through glycin via libglycin-gtk4, which also gives it the
+# frame delay an animated image carries; AnimatedPaintable is what turns that
+# delay into the keep-decoding-frames loop upstream's ExmAnimatedPaintable
+# runs. The `glycin` and `libglycin-gtk4` gems are what make that the real
+# decoder here too, rather than a GdkPixbuf stand-in that could only ever show
+# a still first frame.
 #
 # Decoding happens in #handle_response, which RequestHandler runs on the main
-# loop, so the texture is created on the thread that will draw it.
+# loop, so the texture and the glycin image are created on the thread that
+# will draw and keep animating them.
 class ImageResolver < RequestHandler
   BASE_URI = 'https://extensions.gnome.org/'
 
@@ -39,29 +46,11 @@ class ImageResolver < RequestHandler
     end
   end
 
-  def handle_response(bytes) = Gdk::Texture.new(pixbuf_of(bytes))
-
-  private
-
-    # GdkPixbufLoader insists on being closed before the last reference to it
-    # goes away, even when the write failed, so a failed write closes the
-    # loader before re-raising and the close's own complaint is dropped: the
-    # write's error is the one that describes what went wrong.
-    def pixbuf_of(bytes)
-      loader = GdkPixbuf::PixbufLoader.new
-      begin
-        loader.write(bytes)
-        loader.close
-      rescue GLib::Error
-        close_quietly(loader)
-        raise
+  def handle_response(bytes)
+    Gly::Loader.new(GLib::Bytes.new(bytes)).load.then do |image|
+      image.next_frame.then do |frame|
+        AnimatedPaintable.new(image, GlyGtk4.frame_get_texture(frame), frame.delay)
       end
-      loader.pixbuf
     end
-
-    def close_quietly(loader)
-      loader.close
-    rescue GLib::Error
-      nil
-    end
+  end
 end

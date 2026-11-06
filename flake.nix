@@ -25,6 +25,14 @@
           libadwaita
           harfbuzz
           librsvg
+          # Sandboxed image decoding (glycin / libglycin-gtk4 gems) and the
+          # extensions.gnome.org HTTP client (soup3 gem).
+          libglycin
+          libglycin-gtk4
+          libsoup_3
+          # Soup3's HTTPS requests go through GIO's TLS extension point, which
+          # ships as a separate GIO module, not part of glib itself.
+          glib-networking
         ]
         # The Ruby `pkg-config` gem resolves `Requires.private` transitively and
         # hard-fails if any .pc in the chain is missing, so gtk4's whole private
@@ -87,6 +95,9 @@
           graphene1 = rubyGnomeGem;
           adwaita = rubyGnomeGem;
           rsvg2 = rubyGnomeGem;
+          glycin = rubyGnomeGem;
+          "libglycin-gtk4" = rubyGnomeGem;
+          soup3 = rubyGnomeGem;
         };
 
         # `makeSearchPath` would take each package's *first* output, and glib's
@@ -129,7 +140,7 @@
           # the wrapper never looks. The wrapper below is built by hand and
           # points at both the pre- and post-move paths.
           nativeBuildInputs = [ pkgs.makeWrapper ];
-          buildInputs = [ gems ] ++ gtkStack;
+          buildInputs = [ gems pkgs.glycin-loaders ] ++ gtkStack;
 
           dontBuild = true;
 
@@ -160,11 +171,13 @@
               --add-flags "-I$out/share/Extension-Manager/lib" \
               --add-flags "$out/share/Extension-Manager/exe/${launcher}" \
               --set GI_TYPELIB_PATH "${typelibPath}" \
+              --set GIO_EXTRA_MODULES "${pkgs.glib-networking}/lib/gio/modules" \
               --prefix XDG_DATA_DIRS : "$out/share" \
               --prefix XDG_DATA_DIRS : "$out/share/gsettings-schemas/Extension-Manager-0.1.0" \
               --prefix XDG_DATA_DIRS : "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}" \
               --prefix XDG_DATA_DIRS : "${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}" \
-              --prefix XDG_DATA_DIRS : "${pkgs.adwaita-icon-theme}/share"
+              --prefix XDG_DATA_DIRS : "${pkgs.adwaita-icon-theme}/share" \
+              --prefix XDG_DATA_DIRS : "${pkgs.glycin-loaders}/share"
 
             runHook postInstall
           '';
@@ -201,13 +214,18 @@
             pkgs.xvfb-run
             pkgs.gsettings-desktop-schemas
             pkgs.adwaita-icon-theme
+            # The sandboxed loader processes glycin actually shells out to at
+            # runtime to decode an image; libglycin/libglycin-gtk4 are only
+            # the typelib + GTK4 glue the gem talks to.
+            pkgs.glycin-loaders
           ] ++ gtkStack;
 
           # Icons, GSettings schemas and the GTK portal all resolve through
           # XDG_DATA_DIRS; without these the window opens with blank icons.
           shellHook = ''
-            export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}:${pkgs.adwaita-icon-theme}/share:$XDG_DATA_DIRS"
+            export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}:${pkgs.adwaita-icon-theme}/share:${pkgs.glycin-loaders}/share:$XDG_DATA_DIRS"
             export GI_TYPELIB_PATH="${typelibPath}''${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
+            export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}"
             export RUBYLIB="$PWD/lib''${RUBYLIB:+:$RUBYLIB}"
             [ -d data/schemas ] && export GSETTINGS_SCHEMA_DIR="$PWD/data/schemas"
             unset BUNDLE_GEMFILE BUNDLE_FROZEN

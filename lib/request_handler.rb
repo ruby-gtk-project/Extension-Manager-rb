@@ -2,8 +2,7 @@
 
 require 'adwaita'
 require 'json'
-require 'net/http'
-require 'uri'
+require 'soup3'
 
 # The base class every extensions.gnome.org client shares.
 #
@@ -12,10 +11,15 @@ require 'uri'
 # two error messages upstream distinguishes by status code, and a
 # `handle_response` the subclass overrides to turn bytes into a model.
 #
-# libsoup has no Ruby binding, so the request runs on a Ruby thread and the
-# answer is handed back on the main loop through GLib::Idle — the same
-# main-thread contract g_task gives upstream's callbacks, which is what makes
-# it safe for a callback to touch widgets.
+# Upstream builds this on libsoup; so does this port, through the `soup3` gem
+# — a thin GObject-Introspection binding over the same library, not a
+# hand-rolled HTTP client. The request runs through
+# `Soup::Session#send_and_read_async`, so it is libsoup's own GTask doing the
+# work, dispatched back to this same GLib main loop — never a Ruby Thread.
+# That matters here specifically: the gobject-introspection loader's
+# repository and typelib caches are not safe to touch from two native threads
+# at once, so a Soup call (or any other GI call) belongs on the thread the
+# main loop runs on, which is exactly where the async API delivers it.
 class RequestHandler
   TIMEOUT_SECONDS = 30
 
@@ -45,8 +49,9 @@ class RequestHandler
 
   # Fetches `url` and yields the parsed model, or the error, on the main loop.
   # The returned object answers #cancel, which makes the pending answer a
-  # no-op: upstream relies on the GCancellable for exactly that, so a search
-  # whose query has moved on cannot overwrite the newer results.
+  # no-op and cancels the underlying GCancellable, so a search whose query
+  # has moved on cannot overwrite the newer results and the request itself
+  # stops rather than finishing unread.
   def request(url, &block)
     Request.new.tap do |request|
       cached(url).then do |bytes|
@@ -66,76 +71,77 @@ class RequestHandler
   end
 
   # A handle on one in-flight request, standing in for upstream's
-  # GCancellable.
+  # GCancellable — because it is one.
   class Request
     def initialize
-      @cancelled = false
+      @cancellable = Gio::Cancellable.new
     end
 
-    def cancel = @cancelled = true
-    def cancelled? = @cancelled
+    def cancel = @cancellable.cancel
+    def cancelled? = @cancellable.cancelled?
+    def cancellable = @cancellable
   end
 
   private
 
     def fetch(request, url, &block)
-      Thread.new do
-        begin
-          bytes = http_get(url)
-          store(url, bytes)
-          deliver(request, bytes, &block)
-        rescue StandardError => e
-          deliver_error(request, e, &block)
-        end
+      message = Soup::Message.new('GET', url)
+      session.send_and_read_async(message, GLib::PRIORITY_DEFAULT, request.cancellable) do |_source, result, _token|
+        on_response(
+          request,
+          url,
+          message,
+          result,
+          &block
+        )
       end
     end
 
-    def http_get(url)
-      URI.parse(url).then do |uri|
-        Net::HTTP.start(
-          uri.host,
-          uri.port,
-          use_ssl:      uri.scheme == 'https',
-          open_timeout: TIMEOUT_SECONDS,
-          read_timeout: TIMEOUT_SECONDS,
-        ) do |http|
-          read_response(http.request(Net::HTTP::Get.new(uri)))
-        end
+    def on_response(request, url, message, result, &block)
+      status_checked(message, session.send_and_read_finish(result).to_s).then do |body|
+        store(url, body)
+        deliver(request, body, &block)
+      end
+    rescue GLib::Error, RequestError => e
+      deliver_error(request, e, &block)
+    end
+
+    # One Session per handler: Soup::Session pools its own connections, so
+    # reusing it across requests is how upstream's single ExmRequestHandler
+    # session behaves too.
+    def session
+      @session ||= Soup::Session.new.tap do |session|
+        session.timeout = TIMEOUT_SECONDS
       end
     end
 
-    def read_response(response)
-      status = response.code.to_i
+    def status_checked(message, bytes)
+      status = message.status_code.to_i
       if status >= 500
         raise RequestError.new(status, SERVER_ERROR_MESSAGE)
       elsif status >= 400
         raise RequestError.new(status, CLIENT_ERROR_MESSAGE)
       else
-        response.body
+        bytes
       end
     end
 
-    # Parsing happens on the main loop, not on the worker thread: the models
-    # are GObjects and building them off the main thread is not safe.
+    # Already on the main loop — the async callback delivers here directly —
+    # so this only has to guard against a request that moved on and run the
+    # subclass's parsing.
     def deliver(request, bytes, &block)
-      GLib::Idle.add do
-        unless request.cancelled?
-          begin
-            block&.call(handle_response(bytes), nil)
-          rescue StandardError => e
-            block&.call(nil, e)
-          end
+      unless request.cancelled?
+        begin
+          block&.call(handle_response(bytes), nil)
+        rescue StandardError => e
+          block&.call(nil, e)
         end
-        GLib::Source::REMOVE
       end
     end
 
     def deliver_error(request, error, &block)
-      GLib::Idle.add do
-        unless request.cancelled?
-          block&.call(nil, error)
-        end
-        GLib::Source::REMOVE
+      unless request.cancelled?
+        block&.call(nil, error)
       end
     end
 

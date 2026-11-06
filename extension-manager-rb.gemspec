@@ -96,6 +96,14 @@ Gem::Specification.new do |spec|
   spec.executables = ["extension-manager"]
   spec.require_paths = ["lib"]
 
+  # Runtime toolkit
+  spec.add_dependency("glib2")                                                      # ruby >= 2.5, GLib/GObject bindings every ruby-gnome gem builds on
+  spec.add_dependency("gtk4")                                                        # ruby >= 2.5, the GTK4 widget toolkit
+  spec.add_dependency("adwaita")                                                     # ruby >= 2.5, Libadwaita widgets (Adwaita::)
+  spec.add_dependency("glycin")                                                      # ruby >= 2.5, sandboxed image decoding (Gly::)
+  spec.add_dependency("libglycin-gtk4")                                              # ruby >= 2.5, glycin -> GdkTexture (GlyGtk4::)
+  spec.add_dependency("soup3")                                                       # ruby >= 2.5, the extensions.gnome.org HTTP client (Soup::)
+
   # NOTE: It is preferable to list development dependencies in the gemspec due to increased
   #       visibility and discoverability.
   #       However, development dependencies in gemspec will install on

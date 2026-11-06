@@ -93,10 +93,10 @@ GtkDriver.drive(application, shots: 'tmp/shots') do |d, app|
     d.shot('11-browse-results')
   end
 
-  d.step('rows are not activatable without a detail view') do
+  d.step('rows are activatable now that the window has a detail view') do
     page.search_results.get_row_at_index(0).then do |row|
-      d.check('not activatable') { !row.activatable? }
-      d.check('no chevron') { !row.next_icon.visible? }
+      d.check('activatable') { row.activatable? }
+      d.check('chevron shown') { row.next_icon.visible? }
       d.check('install button offers install') do
         row.install_button.label.label == 'Install…'
       end

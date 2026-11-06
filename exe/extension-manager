@@ -2,5 +2,20 @@
 # frozen_string_literal: true
 
 require "extension_manager"
+require "backtrace"
+require "error_dialog"
 
-ExtensionManager::Application.new.build.run
+# Ported from upstream's main.c, which calls exm_backtrace_init before
+# anything else runs and exm_backtrace_print from the signal handler that
+# catches a native crash. Backtrace.install is the equivalent boundary here:
+# it runs the whole application inside it, and an uncaught exception that
+# would otherwise kill the process with a bare trace on stderr is instead
+# formatted and shown in ErrorDialog, the same window upstream's crash
+# handler opens.
+Backtrace.install(
+  lambda { |text|
+    ErrorDialog.new(text, version: ExtensionManager::Application.version).build.present
+  },
+) do
+  ExtensionManager::Application.new.build.run
+end

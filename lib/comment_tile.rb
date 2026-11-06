@@ -67,7 +67,7 @@ class CommentTile < Gtk::Box
   end
 
   def body_label
-    @body_label ||= Gtk::Label.new(comment.comment.to_s).tap do |label|
+    @body_label ||= Gtk::Label.new(Utils.convert_html(comment.comment)).tap do |label|
       label.add_css_class('multiline')
       label.use_markup = true
       label.wrap = true

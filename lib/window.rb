@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 require 'adwaita'
+require_relative 'author_page'
 require_relative 'browse_page'
 require_relative 'confirm_dialogs'
+require_relative 'detail_view'
 require_relative 'error_dialog'
 require_relative 'extension_error_dialog'
 require_relative 'installed_page'
 require_relative 'primary_menu'
+require_relative 'screenshot_view'
 require_relative 'types'
 
 # The application window.
@@ -22,12 +25,11 @@ require_relative 'types'
 # breakpoint drops that title and reveals the switcher bar instead, which is
 # the same pair of setters upstream's Adw.Breakpoint carries.
 #
-# Every action upstream installs on the window class is installed here, bar
-# the ones whose view is not ported yet: win.show-detail, win.show-author,
-# win.show-main, win.show-screenshot, win.show-upgrade-assistant and the three
-# screenshot.zoom-* actions all need the detail view, the author page, the
-# screenshot view or the upgrade assistant, and installing an action that
-# cannot do its job would only make the widgets pointing at it look alive.
+# Every action upstream installs on the window class is installed here now
+# bar win.show-upgrade-assistant, which still has no upgrade assistant to
+# show: win.show-detail, win.show-author, win.show-main and win.show-screenshot
+# push the detail view, the author page or the one shared screenshot view, and
+# the three screenshot.zoom-* actions delegate to whichever view is showing.
 #
 # The keyboard bindings that survive that are upstream's too: Ctrl+F opens the
 # installed search or focuses the browse entry depending on what is showing,
@@ -76,6 +78,9 @@ class Window < Adwaita::ApplicationWindow
       end
 
       navigation_view.add(main_page)
+      detail_view.build
+      author_page.build
+      screenshot_view.build
 
       app_view.tap do |view|
         view.add_top_bar(header_bar)
@@ -191,7 +196,27 @@ class Window < Adwaita::ApplicationWindow
   end
 
   def installed_page = @installed_page ||= InstalledPage.new(manager, settings)
-  def browse_page = @browse_page ||= BrowsePage.new(manager)
+
+  def browse_page
+    @browse_page ||= BrowsePage.new(manager, on_show_detail: ->(uuid) { show_detail(uuid) })
+  end
+
+  def detail_view
+    @detail_view ||= DetailView.new.tap { |view| view.manager = manager }
+  end
+
+  def author_page
+    @author_page ||= AuthorPage.new.tap { |page| page.manager = manager }
+  end
+
+  def screenshot_view
+    @screenshot_view ||= ScreenshotView.new.tap do |view|
+      view.on_zoom_changed do |zoom_level|
+        action_set_enabled('screenshot.zoom-in', zoom_level < view.zoom_level_max)
+        action_set_enabled('screenshot.zoom-out', zoom_level > view.zoom_level_min)
+      end
+    end
+  end
 
   def cancel_selection_button
     @cancel_selection_button ||= Gtk::Button.new.tap do |button|
@@ -328,12 +353,50 @@ class Window < Adwaita::ApplicationWindow
     end
   end
 
+  def show_detail_action
+    @show_detail_action ||= string_action('show-detail') { |uuid| show_detail(uuid) }
+  end
+
+  # "(uss)": the creator id, their username and their display name, exactly
+  # as upstream's win.show-author parameter is typed.
+  def show_author_action
+    @show_author_action ||= Gio::SimpleAction.new('show-author', GLib::VariantType.new('(uss)')).tap do |action|
+      action.signal_connect('activate') { |_action, parameter| show_author(parameter.to_a) }
+    end
+  end
+
+  def show_main_action
+    @show_main_action ||= Gio::SimpleAction.new('show-main').tap do |action|
+      action.signal_connect('activate') { navigation_view.pop_to_page(main_page) }
+    end
+  end
+
+  def show_screenshot_action
+    @show_screenshot_action ||= Gio::SimpleAction.new('show-screenshot').tap do |action|
+      action.signal_connect('activate') { show_screenshot }
+    end
+  end
+
+  # The "screenshot" group every screenshot.zoom-* button and Ctrl+Plus/
+  # Minus/0 points at, delegating to whichever ScreenshotView the window
+  # shares across every detail view and the screenshot view itself.
+  def screenshot_actions
+    @screenshot_actions ||= Gio::SimpleActionGroup.new.tap do |group|
+      group.add_action(zoom_action('zoom-in') { screenshot_view.zoom_in })
+      group.add_action(zoom_action('zoom-out') { screenshot_view.zoom_out })
+      group.add_action(zoom_action('zoom-reset') { screenshot_view.zoom_reset })
+    end
+  end
+
   def shortcuts
     @shortcuts ||= Gtk::ShortcutController.new.tap do |controller|
       controller.scope = :managed
       controller.add_shortcut(search_shortcut)
       controller.add_shortcut(show_page_shortcut(Gdk::Keyval::KEY_1, 'installed'))
       controller.add_shortcut(show_page_shortcut(Gdk::Keyval::KEY_2, 'browse'))
+      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_plus, :control_mask, 'screenshot.zoom-in'))
+      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_minus, :control_mask, 'screenshot.zoom-out'))
+      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_0, :control_mask, 'screenshot.zoom-reset'))
     end
   end
 
@@ -379,13 +442,29 @@ class Window < Adwaita::ApplicationWindow
       ).tap { |shortcut| shortcut.arguments = GLib::Variant.new(target) }
     end
 
+    def named_action_shortcut(keyval, modifier, action_name)
+      Gtk::Shortcut.new(
+        Gtk::KeyvalTrigger.new(keyval, modifier),
+        Gtk::NamedAction.new(action_name),
+      )
+    end
+
+    def zoom_action(name, &block)
+      Gio::SimpleAction.new(name).tap { |action| action.signal_connect('activate') { block.call } }
+    end
+
     def install_window_actions
+      insert_action_group('screenshot', screenshot_actions)
       add_action(show_page_action)
       add_action(show_error_action)
       add_action(show_error_dialog_action)
       add_action(search_online_action)
       add_action(search_installed_action)
       add_action(discover_gnome_action)
+      add_action(show_detail_action)
+      add_action(show_author_action)
+      add_action(show_main_action)
+      add_action(show_screenshot_action)
     end
 
     def connect_signals
@@ -552,6 +631,33 @@ class Window < Adwaita::ApplicationWindow
       else
         extension.url
       end
+    end
+
+    # Upstream's show_view, split by action: a fresh push every time, with
+    # the uuid-keyed load starting right after, exactly as
+    # exm_detail_view_load_for_uuid is called right after the push.
+    def show_detail(uuid)
+      navigation_view.push(detail_view)
+      detail_view.load_for_uuid(uuid)
+    end
+
+    def show_author(parameter)
+      creator_id, username, display_name = parameter
+      navigation_view.push(author_page)
+      author_page.load(creator_id.to_i, username.to_s, display_name.to_s)
+    end
+
+    # Upstream's win.show-screenshot: the shared screenshot view borrows
+    # whatever the currently visible detail view resolved, and titles itself
+    # from that page, before being pushed on top of it.
+    def show_screenshot
+      visible = navigation_view.visible_page
+      if visible.is_a?(DetailView)
+        screenshot_view.title = visible.title.to_s
+        screenshot_view.screenshot = visible.screenshot
+      end
+
+      navigation_view.push(screenshot_view)
     end
 
     # The toast carries the error text to the reporter as its action target.

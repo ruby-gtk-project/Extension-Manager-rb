@@ -8,5 +8,9 @@
 # a packaged app's closure.
 source "https://rubygems.org"
 
+gem "glib2"
 gem "adwaita"
 gem "gtk4"
+gem "glycin"
+gem "libglycin-gtk4"
+gem "soup3"
