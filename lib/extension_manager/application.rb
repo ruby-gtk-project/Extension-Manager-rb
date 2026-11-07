@@ -25,6 +25,10 @@ module ExtensionManager
     APP_ID = 'com.mattjakeman.ExtensionManager'
     TITLE = 'Extension Manager'
     STYLESHEET = File.expand_path('../style.css', __dir__)
+    # Upstream ships these as a GResource icon theme (data/icons/hicolor);
+    # the Ruby bindings have no resource bundle, so the directory is added
+    # to the icon theme's search path directly instead.
+    ICONS_DIR = File.expand_path('../../data/icons', __dir__)
     SESSION_MANAGER = 'org.gnome.SessionManager'
     SESSION_MANAGER_PATH = '/org/gnome/SessionManager'
 
@@ -56,6 +60,7 @@ module ExtensionManager
           else
             @window_built = true
             install_stylesheet
+            install_icon_theme
             app.add_window(window)
             window.build
             manager.connect
@@ -159,6 +164,10 @@ module ExtensionManager
             Gtk::StyleProvider::PRIORITY_APPLICATION,
           )
         end
+      end
+
+      def install_icon_theme
+        Gtk::IconTheme.get_for_display(Gdk::Display.default).add_search_path(ICONS_DIR)
       end
 
       def show_about

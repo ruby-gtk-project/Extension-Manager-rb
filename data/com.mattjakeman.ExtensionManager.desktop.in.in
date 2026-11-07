@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Extension Manager
+Exec=extension-manager %U
+Icon=@app_id@
+Terminal=false
+Type=Application
+Categories=GTK;Utility
+OnlyShowIn=GNOME;
+StartupNotify=true
+MimeType=x-scheme-handler/gnome-extensions;
+DBusActivatable=true
+Comment=Manage GNOME Shell Extensions
+# Translators: Search terms to find this application. Do NOT translate or localize the semicolons. The list MUST also end with a semicolon.
+# Make sure to leave the original strings and add your translations afterwards, so that users can search both in English and your language.
+Keywords=extension;manager;shell;
