@@ -17,5 +17,8 @@ Backtrace.install(
     ErrorDialog.new(text, version: ExtensionManager::Application.version).build.present
   },
 ) do
-  ExtensionManager::Application.new.build.run
+  # ARGV carries --gapplication-service through, which is how the bus starts
+  # this same binary to answer the search provider without opening a window —
+  # exactly how upstream's .service file invokes the compiled binary.
+  ExtensionManager::Application.new.build.run(ARGV)
 end

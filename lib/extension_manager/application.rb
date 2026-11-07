@@ -3,6 +3,7 @@
 require 'gtk4'
 require 'adwaita'
 
+require_relative '../gnome_shell_search_provider'
 require_relative '../manager'
 require_relative '../settings'
 require_relative '../shortcuts_dialog'
@@ -42,12 +43,24 @@ module ExtensionManager
 
     def build
       app.tap do
+        app.signal_connect('startup') { export_search_provider }
+        app.signal_connect('shutdown') { search_provider.unexport }
+        # GApplication emits 'activate' every time the app is asked to come
+        # to the foreground, including a second time from the shell search
+        # provider's win.launch-search while the window already exists —
+        # upstream's own activate handler is the same single-shot build, run
+        # once and then just re-presenting the existing window after.
         app.signal_connect('activate') do
-          install_stylesheet
-          app.add_window(window)
-          window.build
-          manager.connect
-          window.present
+          if @window_built
+            window.present
+          else
+            @window_built = true
+            install_stylesheet
+            app.add_window(window)
+            window.build
+            manager.connect
+            window.present
+          end
         end
 
         install_app_actions
@@ -62,6 +75,8 @@ module ExtensionManager
     def manager = @manager ||= Manager.new
 
     def settings = @settings ||= Settings.new
+
+    def search_provider = @search_provider ||= GnomeShellSearchProvider.new(app, manager)
 
     def window
       @window ||= Window.new(
@@ -122,6 +137,17 @@ module ExtensionManager
       def install_accels
         app.set_accels_for_action('app.quit', ['<primary>q'])
         app.set_accels_for_action('window.close', ['<primary>w'])
+      end
+
+      # Upstream's exm_application_dbus_register override, which exports the
+      # search provider on the connection GApplication itself establishes.
+      # The Ruby bindings cannot override that vfunc, but 'startup' fires
+      # right after that same registration happens, which is where upstream's
+      # own class_init point lands too.
+      def export_search_provider
+        app.dbus_connection&.then do |connection|
+          search_provider.export(connection, "#{app.dbus_object_path}/SearchProvider")
+        end
       end
 
       def install_stylesheet

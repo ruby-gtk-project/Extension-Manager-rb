@@ -163,6 +163,32 @@
               ${pkgs.glib.dev}/bin/glib-compile-schemas $out/share/glib-2.0/schemas
             fi
 
+            # The shell search provider's D-Bus activation and registration
+            # files — upstream's data/com.mattjakeman.ExtensionManager.search-provider.ini.in
+            # and .service.in. The .ini is what tells GNOME Shell this bus
+            # name answers SearchProvider2 at all; the .service is what lets
+            # the bus start this same binary (with --gapplication-service)
+            # the first time the shell asks for it, rather than requiring
+            # the app already be running. @app_id@, @app_id_path@ and
+            # @bindir@ are the substitutions meson's configure_file does for
+            # these .in files upstream, done here with sed instead.
+            if [ -f data/com.mattjakeman.ExtensionManager.search-provider.ini.in ]; then
+              mkdir -p $out/share/gnome-shell/search-providers \
+                $out/share/dbus-1/services
+
+              sed \
+                -e "s|@app_id@|com.mattjakeman.ExtensionManager|g" \
+                -e "s|@app_id_path@|/com/mattjakeman/ExtensionManager|g" \
+                data/com.mattjakeman.ExtensionManager.search-provider.ini.in \
+                > $out/share/gnome-shell/search-providers/com.mattjakeman.ExtensionManager.search-provider.ini
+
+              sed \
+                -e "s|@app_id@|com.mattjakeman.ExtensionManager|g" \
+                -e "s|@bindir@|$out/bin|g" \
+                data/com.mattjakeman.ExtensionManager.service.in \
+                > $out/share/dbus-1/services/com.mattjakeman.ExtensionManager.service
+            fi
+
             # -rbundler/setup puts the bundled gems on the load path, and
             # GI_TYPELIB_PATH keeps GObject-Introspection from re-registering
             # types the cairo gem's C extension has already registered.

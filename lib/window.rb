@@ -11,6 +11,7 @@ require_relative 'installed_page'
 require_relative 'primary_menu'
 require_relative 'screenshot_view'
 require_relative 'types'
+require_relative 'upgrade_assistant'
 
 # The application window.
 #
@@ -25,10 +26,10 @@ require_relative 'types'
 # breakpoint drops that title and reveals the switcher bar instead, which is
 # the same pair of setters upstream's Adw.Breakpoint carries.
 #
-# Every action upstream installs on the window class is installed here now
-# bar win.show-upgrade-assistant, which still has no upgrade assistant to
-# show: win.show-detail, win.show-author, win.show-main and win.show-screenshot
-# push the detail view, the author page or the one shared screenshot view, and
+# Every action upstream installs on the window class is installed here:
+# win.show-detail, win.show-author, win.show-main and win.show-screenshot
+# push the detail view, the author page or the one shared screenshot view,
+# win.show-upgrade-assistant presents the upgrade assistant dialog, and
 # the three win.zoom-* actions delegate to whichever view is showing. Upstream
 # groups those three under its own "screenshot" action prefix; see
 # `zoom_in_action` below for why this port keeps them as plain window actions
@@ -380,6 +381,12 @@ class Window < Adwaita::ApplicationWindow
     end
   end
 
+  def show_upgrade_assistant_action
+    @show_upgrade_assistant_action ||= Gio::SimpleAction.new('show-upgrade-assistant').tap do |action|
+      action.signal_connect('activate') { show_upgrade_assistant }
+    end
+  end
+
   # Every screenshot.zoom-* button and Ctrl+Plus/Minus/0 points at these,
   # delegating to whichever ScreenshotView the window shares across every
   # detail view and the screenshot view itself.
@@ -487,6 +494,7 @@ class Window < Adwaita::ApplicationWindow
       add_action(show_author_action)
       add_action(show_main_action)
       add_action(show_screenshot_action)
+      add_action(show_upgrade_assistant_action)
     end
 
     def connect_signals
@@ -680,6 +688,16 @@ class Window < Adwaita::ApplicationWindow
       end
 
       navigation_view.push(screenshot_view)
+    end
+
+    # Upstream's win.show-upgrade-assistant: a fresh dialog every time,
+    # exactly as upstream's show_upgrade_assistant_cb constructs one.
+    def show_upgrade_assistant
+      UpgradeAssistant.new.tap do |dialog|
+        dialog.manager = manager
+        dialog.build
+        dialog.present(self)
+      end
     end
 
     # The toast carries the error text to the reporter as its action target.
