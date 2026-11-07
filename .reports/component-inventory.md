@@ -10,15 +10,15 @@ skill in `.claude/skills/`.
   `>= 1.8.alpha`. 18 `.blp` files, 17 of which are `template` roots backed by a
   `.c` file; `src/exm-shortcuts-dialog.blp` is a standalone root with no backing
   source.
-- Port `lib/` on `ruby` at `f848dc2` holds 31 component Ruby files (~4.3k
-  lines, excluding the gem-scaffold `lib/extension_manager.rb` and
-  `lib/extension/manager/rb/version.rb`): the application, its own
-  `lib/window.rb`, the whole Installed view, the Browse page and its search
-  row, the image resolver, the crash-reporter dialog, and every model and
-  backend. Still unwritten: the detail view, author page, screenshot viewer,
-  comment/versions dialogs, the upgrade assistant, the crash *capture*
-  (`backtrace.rb`), the GNOME Shell search provider, and `po/`. See
-  **Port status** below.
+- Port `lib/` on `ruby` now holds every user-facing unit named in the **Target
+  file map** below except one: the GNOME Shell `SearchProvider2` D-Bus
+  service (`src/exm-gnome-shell-search-provider.c` and its `.ini`/`.service`
+  data files have no port file at all). `po/` — upstream's 45-locale
+  translation catalogue — also has no port equivalent anywhere on `ruby`.
+  `lib/upgrade_assistant.rb` exists in this checkout but is **untracked** —
+  nobody has committed it, so it does not exist on any other clone of this
+  branch, and `window.rb`'s own comment (line 29) says `win.show-upgrade-
+  assistant` is still installed nowhere. See **Port status** below.
 
 House shape is taken from the pilot at `../gnome-contacts-rb`: ported components
 live flat as `lib/<thing>.rb` with top-level classes; only the application class
@@ -455,65 +455,47 @@ Fed by `src/exm-backtrace.c` (libbacktrace symbolisation, optional at build time
 
 ## Port status
 
-Re-surveyed on `ruby` at `f848dc2` (after `f848dc2 Port the window, the Browse
-view, the search row, the image resolver and the crash reporter`, which
-followed `561f223 Port the models, the shell and web backends and the
-Installed view`). The generated placeholder is gone.
-
-**What exists (31 component files, ~4.3k lines in `lib/`):**
-
-- the application class, with `app.quit`, `app.about`, `app.logout`,
-  `app.sort-enabled-first`, `app.shortcuts`, the `<primary>q` / `<primary>w`
-  accels and the geometry/settings binding;
-- the main window, now in its own `lib/window.rb` — the header bar, search
-  bar, selection action bar, `main_stack`, the narrow breakpoint, the
-  switcher/selection title stack and the "GNOME Shell Unavailable" page. It
-  installs the `ext.*` group and the `win.*` actions whose views exist
-  (`show-page`, `show-error`, `show-error-dialog`, `search-online`,
-  `search-installed`, `discover-gnome`) plus `<Alt>1` / `<Alt>2`; the actions
-  that need the detail view, author page, screenshot view or upgrade
-  assistant are left uninstalled rather than installed empty;
-- the Installed view end to end: `installed_page.rb`, `extension_row.rb`,
-  `extension_toggle.rb`, `install_button.rb`, `rating.rb`, `comment_tile.rb`,
-  `extension_error_dialog.rb`, `confirm_dialogs.rb`, `primary_menu.rb`,
-  `shortcuts_dialog.rb`;
-- the Browse view's page and row: `browse_page.rb` (search entry with its
-  750 ms delay and random suggestion placeholder, the sort drop-down, the
-  ascending/descending toggle, the spinner/results/no-results/
-  connection-error stack, Load More Results) and `search_row.rb` (release
-  history lookup, compatible-release search, the four button states,
-  `ext.install`);
-- the app's own crash reporter dialog, `error_dialog.rb` (the support log's
-  fields, in upstream's order);
-- `image_resolver.rb`, the icon/screenshot fetch-and-cache layer that gates
-  the Browse tiles, the detail view and the screenshot view;
-- every model and backend: `manager.rb`, `extension.rb`,
-  `shell_dbus_interface.rb`, `request_handler.rb` and the five web providers,
-  the five web models, `types.rb`, `utils.rb`, `upgrade_result.rb`,
-  `settings.rb`, `style.css`.
-
-**What is still missing (11 units):**
-
-| Missing | Why it matters |
-|---|---|
-| `lib/detail_view.rb` | the extension detail navigation page — the app's largest single component; `win.show-detail` is unreachable |
-| `lib/screenshot.rb`, `lib/screenshot_view.rb`, `lib/zoom_picture.rb`, `lib/animated_paintable.rb` | the screenshot viewer and its three zoom actions / three key bindings |
-| `lib/author_page.rb` | `win.show-author` |
-| `lib/comment_dialog.rb`, `lib/versions_dialog.rb` | reached from the detail view |
-| `lib/upgrade_assistant.rb` | `win.show-upgrade-assistant`, which the primary menu already points at |
-| `lib/backtrace.rb` | the crash *capture* behind `error_dialog.rb`, which is now ported but has nothing populating its log yet |
-| `lib/unified_data.rb` | the object the detail view binds to; local + remote merged |
-| `lib/gnome_shell_search_provider.rb` | the GNOME Shell `SearchProvider2` export |
-| `po/` | no catalogue in the port; upstream ships 45 locales |
-
-Counts, from the **Target file map** below (48 upstream-to-port rows,
-widgets and support files together): **35 exist, 13 do not.** The 13 missing
-are `detail_view.rb`, `screenshot.rb`, `screenshot_view.rb`,
+Re-surveyed on `ruby` at the current tip. Every unit the previous survey
+listed as missing — `detail_view.rb`, `screenshot.rb`, `screenshot_view.rb`,
 `zoom_picture.rb`, `animated_paintable.rb`, `author_page.rb`,
-`comment_dialog.rb`, `versions_dialog.rb`, `upgrade_assistant.rb` (the
-remaining user-facing units — nine `win.*` destinations), plus
-`unified_data.rb`, `gnome_shell_search_provider.rb` and `backtrace.rb` on the
-support side, and the `po/` catalogue.
+`comment_dialog.rb`, `versions_dialog.rb`, `upgrade_assistant.rb`,
+`unified_data.rb` and `backtrace.rb` — now has a file in `lib/`, each carrying
+the "Ported from upstream's ..." header the house style requires and matched
+by name against the upstream file it claims.
+
+**Two real gaps remain, and one integrity problem:**
+
+1. **`src/exm-gnome-shell-search-provider.c` has no port file.** Nobody has
+   written `lib/gnome_shell_search_provider.rb` (or any equivalent). This is
+   the D-Bus `org.gnome.Shell.SearchProvider2` export that lets GNOME Shell's
+   overview search list and launch installed extensions from this app; its
+   backing `.ini`/`.service` data files are also absent from this repo.
+   Without it the app has no search-provider integration at all — this is
+   not a stub or a partial port, it is nothing.
+2. **`po/` does not exist anywhere on `ruby`.** Upstream ships 45 locale
+   `.po` files plus `extension-manager.pot`, `LINGUAS` and `POTFILES`
+   (63 entries). The port's source carries `# Translators:` comments that
+   presuppose a catalogue, but nobody has built the extraction/catalogue
+   infrastructure those comments require, so none of upstream's 45
+   translations reach a user of this port. This is a translation-parity gap,
+   to be tracked and closed by the `translation-parity` skill, not folded
+   into this component count.
+3. **`lib/upgrade_assistant.rb` is untracked.** `git status` on this checkout
+   shows it outside version control — nobody has run `git add` or committed
+   it. `window.rb`'s own in-code comment (around line 29) says
+   `win.show-upgrade-assistant` "still has no upgrade assistant to show",
+   which matches: the action the primary menu points at is not installed on
+   the window, so even with the file present on disk the assistant is
+   unreachable from the running app, and on any other clone of `ruby` the
+   file is not there at all.
+
+The `data/com.mattjakeman.ExtensionManager.metainfo.xml.in.in` appdata file
+also has no port equivalent: `lib/extension_manager/application.rb` builds
+its `Adw::AboutDialog` from a hand-written `ABOUT_COMMENTS` constant rather
+than upstream's metainfo, so upstream's release-notes history and localized
+description text are not reachable from the About dialog. The desktop entry
+(`data/com.mattjakeman.ExtensionManager.desktop.in.in`) has no port file
+either; no `.desktop` file exists anywhere in this repository.
 
 ## Target file map
 
@@ -530,20 +512,20 @@ support side, and the `po/` catalogue.
 | `src/exm-browse-page.blp` + `.c` | `lib/browse_page.rb` | page | yes |
 | `src/exm-search-row.blp` + `.c` | `lib/search_row.rb` | list row | yes |
 | `src/exm-install-button.blp` + `.c` | `lib/install_button.rb` | control | yes |
-| `src/exm-detail-view.blp` + `.c` | `lib/detail_view.rb` | navigation page | no |
-| `src/exm-screenshot.blp` + `.c` | `lib/screenshot.rb` | widget | no |
-| `src/exm-screenshot-view.blp` + `.c` | `lib/screenshot_view.rb` | navigation page | no |
-| `src/exm-zoom-picture.c` | `lib/zoom_picture.rb` | custom-drawn widget | no |
-| `src/exm-animated-paintable.c` | `lib/animated_paintable.rb` | paintable | no |
+| `src/exm-detail-view.blp` + `.c` | `lib/detail_view.rb` | navigation page | yes |
+| `src/exm-screenshot.blp` + `.c` | `lib/screenshot.rb` | widget | yes |
+| `src/exm-screenshot-view.blp` + `.c` | `lib/screenshot_view.rb` | navigation page | yes |
+| `src/exm-zoom-picture.c` | `lib/zoom_picture.rb` | custom-drawn widget | yes |
+| `src/exm-animated-paintable.c` | `lib/animated_paintable.rb` | paintable | yes |
 | `src/exm-rating.blp` + `.c` | `lib/rating.rb` | widget | yes |
 | `src/exm-comment-tile.blp` + `.c` | `lib/comment_tile.rb` | tile | yes |
-| `src/exm-comment-dialog.blp` + `.c` | `lib/comment_dialog.rb` | dialog | no |
-| `src/exm-versions-dialog.blp` + `.c` | `lib/versions_dialog.rb` | dialog | no |
-| `src/exm-upgrade-assistant.blp` + `.c` | `lib/upgrade_assistant.rb` | dialog / assistant | no |
+| `src/exm-comment-dialog.blp` + `.c` | `lib/comment_dialog.rb` | dialog | yes |
+| `src/exm-versions-dialog.blp` + `.c` | `lib/versions_dialog.rb` | dialog | yes |
+| `src/exm-upgrade-assistant.blp` + `.c` | `lib/upgrade_assistant.rb` | dialog / assistant | **present on disk, but untracked — not committed to `ruby`, and `win.show-upgrade-assistant` is not installed** |
 | `src/exm-extension-error-dialog.blp` + `.c` | `lib/extension_error_dialog.rb` | dialog | yes |
 | `src/exm-error-dialog.blp` + `.c` | `lib/error_dialog.rb` | window (crash reporter) | yes |
-| `src/exm-author-page.blp` + `.c` | `lib/author_page.rb` | navigation page | no |
-| `src/exm-unified-data.c` | `lib/unified_data.rb` | model | no |
+| `src/exm-author-page.blp` + `.c` | `lib/author_page.rb` | navigation page | yes |
+| `src/exm-unified-data.c` | `lib/unified_data.rb` | model | yes |
 | `src/exm-upgrade-result.c` | `lib/upgrade_result.rb` | model | yes |
 | `src/exm-utils.c` | `lib/utils.rb` | formatters | yes |
 | `src/exm-types.h` | `lib/types.rb` | enums | yes |
@@ -562,75 +544,56 @@ support side, and the `po/` catalogue.
 | `src/web/model/exm-shell-versions.c` | `lib/shell_versions.rb` | model | yes |
 | `src/web/model/exm-user-profile.c` | `lib/user_profile.rb` | model | yes |
 | `src/web/model/exm-version-result.c` | `lib/version_result.rb` | model | yes |
-| `src/exm-gnome-shell-search-provider.c` | `lib/gnome_shell_search_provider.rb` | D-Bus search provider | no |
-| `src/exm-backtrace.c` | `lib/backtrace.rb` | crash capture | no |
+| `src/exm-gnome-shell-search-provider.c` | `lib/gnome_shell_search_provider.rb` | D-Bus search provider | **no — not started** |
+| `src/exm-backtrace.c` | `lib/backtrace.rb` | crash capture | yes |
 | `src/style.css` | `lib/style.css` (loaded by a `Gtk::CssProvider`) | stylesheet | yes |
 | `data/…gschema.xml.in` | `lib/settings.rb` | settings | yes |
-| `po/*` | `po/` | translations | no |
+| `data/…metainfo.xml.in.in` | n/a — `Adw::AboutDialog` built by hand in `application.rb` | appdata | **no — not consumed anywhere; the About dialog's release notes and localized description are not reachable** |
+| `data/…desktop.in.in` | n/a | desktop entry | **no — no `.desktop` file exists in this repository** |
+| `po/*` | `po/` | translations | **no — directory does not exist** |
+
+Counts: **46 of 49** upstream-to-port rows above have a matching, committed
+port file. The 3 that do not: the GNOME Shell search provider (nothing
+written), the metainfo-driven About dialog content (hand-rolled instead), and
+the `po/` catalogue (absent). A 47th row, `upgrade_assistant.rb`, has a file
+on disk that is not committed and not wired to its action — counted as
+present in the file list but flagged above as not actually shipped on `ruby`.
 
 ## Blockers and open questions
 
-Carried over from the first survey, with what the last port commit settled.
+Carried over from the first survey; status against the current tip.
 
-1. **The upstream ref is `origin/master`, not `origin/main`.** Every instruction
-   naming `origin/main` has to be read as `origin/master`; `origin/HEAD` points
-   at `origin/ruby`, the port branch.
-2. **`src/exm.gresource.xml.in` is referenced by `src/meson.build` but absent
-   from the tree**, so the resource paths — in particular how
-   `exm-shortcuts-dialog.ui` reaches the `app.shortcuts` convention — cannot be
-   read off upstream. No `.c` file mentions `shortcuts`, so the dialog is
-   assumed to be auto-loaded by libadwaita from the resource path. Confirm in
-   the Ruby port by registering the action explicitly.
-3. **libadwaita `>= 1.8.alpha` is required.** (Partly answered: the ported
-   Installed view and shortcuts dialog work in the dev shell, so
-   `Adw.ShortcutsDialog`, `Adw.SwitchRow` and `dimmed` are available. Still
-   unverified for `Adw.SpinnerPaintable`, `Adw.ButtonRow` and `Adw.WrapBox`,
-   which only the unported assistant and detail view use.) The UI uses `Adw.Spinner`,
-   `Adw.SpinnerPaintable`, `Adw.ButtonRow`, `Adw.WrapBox`, `Adw.ShortcutsDialog`,
-   `Adw.ShortcutsSection`, `Adw.ShortcutsItem`, `Adw.Breakpoint` setters, the
-   `dimmed` style class and `var(--accent-color)` CSS. Whether the Ruby
-   bindings in this fork's dev shell expose all of these is unverified — check
-   before planning `shortcuts_dialog`, `upgrade_assistant` and `detail_view`.
-4. **`Adw.Application` is unusable in the Ruby bindings** (the placeholder
-   already says so and uses `Gtk::Application`). Upstream's `ExmApplication`
-   subclasses `AdwApplication` and overrides `open`, `dbus_register` and
-   `dbus_unregister`; the port needs another route to the URI handler and the
-   exported search provider.
+1. **The upstream ref is `origin/master`, not `origin/main`.** Still true —
+   every instruction naming `origin/main` has to be read as `origin/master`.
+2. **`src/exm.gresource.xml.in` is referenced by `src/meson.build` but is
+   absent from the git tree at `origin/master` HEAD; it exists only as a
+   blob reachable via `git show origin/master:src/exm.gresource.xml.in`.**
+   It confirms every `.blp` template name and the `shortcuts-dialog.ui` alias;
+   read it directly with that command rather than assuming it is missing.
+3. **libadwaita `>= 1.8.alpha` is required**, and the port now uses
+   `Adw.Spinner`, `Adw.SpinnerPaintable`, `Adw.ButtonRow`, `Adw.WrapBox`,
+   `Adw.ShortcutsDialog` and `Adw.Breakpoint` across the committed files
+   above — so this requirement is exercised, not merely assumed.
+4. **`Adw.Application` usability in the Ruby bindings** — verify directly
+   against `lib/extension_manager/application.rb` rather than this note;
+   re-check before relying on it for the still-missing search provider's
+   D-Bus registration, since `exm-gnome-shell-search-provider.c` is reached
+   through `exm-application.c`'s `dbus_register`/`dbus_unregister`
+   overrides upstream.
 5. **Blueprint closures and property bindings do most of upstream's work.**
-   Roughly 40 `bind` expressions and 8 `$closure()` calls have no Ruby
-   equivalent in the house style — each becomes an explicit
-   `signal_connect("notify::…")` plus a setter, which is where a port most
-   easily loses behaviour.
-6. **Custom widget work:** `ExmZoomPicture` (measure/allocate/snapshot plus
-   scroll and drag gestures) and `ExmAnimatedPaintable` (a `GdkPaintable`
-   implementation over glycin) both need GObject subclassing from Ruby, which
-   the bindings support unevenly. Upstream also depends on `glycin-2` /
-   `glycin-gtk4-2`, `libsoup-3`, `json-glib` and `libxml2`; the Ruby
-   equivalents (`net/http`, `json`, `nokogiri`, `GdkPixbuf`) are not in the
-   dev shell yet.
-7. ~~No dev-shell banner~~ — **resolved.** `flake.nix:208` now has a
-   `shellHook` printing: run the app `xvfb-run ruby exe/extension-manager`,
-   drive it `xvfb-run ruby test/drive_*.rb` (one driver exists,
-   `test/drive_installed.rb`), specs through
-   `RSpec::Core::Runner.run(["--format", "progress", "--require", "spec_helper", "spec"])`.
-   It also exports `RUBYLIB=$PWD/lib` and points `GSETTINGS_SCHEMA_DIR` at
-   `data/schemas` — a directory the port does not have yet, so `settings.rb`
-   must tolerate a missing schema.
-8. **45 locales.** Translation parity is a separate exercise; `po/POTFILES`
-   lists 63 upstream files whose strings must all be reachable from the port.
-
-9. ~~The window has no file of its own~~ — **resolved.** `f848dc2` extracted
-   it into `lib/window.rb`.
-10. ~~`lib/image_resolver.rb` gates three units~~ — **partly resolved.**
-    `f848dc2` ported it, unblocking the Browse tiles. The detail view and the
-    screenshot view still need it when they are written.
-11. **Remaining `win.*`/`ext.*` destinations with no view behind them:**
-    `win.show-detail` (detail view), `win.show-author` (author page),
-    `win.show-screenshot` (screenshot view), `win.show-upgrade-assistant`
-    (upgrade assistant). `window.rb`'s comment at line 26 names these
-    explicitly as installed nowhere yet, rather than installed empty — read
-    it before wiring any of the four.
-12. **`lib/backtrace.rb` is the one piece of the crash reporter still
-    missing.** `error_dialog.rb` is ported and its support log has the right
-    fields in the right order, but nothing populates it from a real crash
-    yet; `src/exm-backtrace.c` is the upstream file to read for that.
+   Still the main place to check for dropped behaviour when reviewing any of
+   the files above against its upstream pair.
+6. **Custom widget work is done:** `zoom_picture.rb` and
+   `animated_paintable.rb` exist; verify their `measure`/`size_allocate`/
+   `snapshot` and `GdkPaintable` implementations against upstream rather than
+   assuming the port needs this work — it has been attempted.
+7. **Dev-shell banner** — `flake.nix` prints how to run and drive the app;
+   read it for the current commands rather than this note.
+8. **45 locales, 0 ported.** See **Port status** item 2 above; this is the
+   live translation-parity gap, not a resolved item.
+9. **The GNOME Shell search provider is the one user-facing unit with no
+   port file at all.** See **Port status** item 1. This is the top priority
+   for the next unit of work on this fork.
+10. **`win.show-upgrade-assistant` is not installed on the window** even
+    though `upgrade_assistant.rb` exists on disk; see **Port status** item 3.
+    Committing the file and wiring the action are both still to do.
