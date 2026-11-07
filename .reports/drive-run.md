@@ -3,16 +3,63 @@
 Produced with the `ruby-gtk-testing` skill in `.claude/skills/`, driving the
 real app headlessly under `nix develop --command xvfb-run -a ruby test/drive_*.rb`.
 
-## Result (this run, after the upgrade-assistant/search-provider commit)
+## Result (this run, after the icons/desktop-entry/metainfo commit)
 
-All four drive scripts end in `DRIVE OK`:
+Re-run fresh this round, not taken on faith from the previous entry below:
+all five drive scripts end in `DRIVE OK`, re-run individually and verbatim:
 
 - `test/drive_installed.rb` — 39 of 39 checks passed
 - `test/drive_browse.rb` — 53 of 53 checks passed
-- `test/drive_detail.rb` — 46 of 46 checks passed
-- `test/drive_upgrade.rb` (new, written for this run) — 50 of 50 checks passed
+- `test/drive_detail.rb` — 51 of 51 checks passed (up from 46 on a prior
+  commit; re-counted by actually running the script against the code on
+  disk, not copied from the earlier line below)
+- `test/drive_upgrade.rb` — 49 of 49 checks passed (the earlier line below
+  claimed 50; re-running the identical script against the current commit
+  gives 49 — see the previous accountability report for a prior instance of
+  this same off-by-one)
+- `test/drive_assets.rb` (new, written this round) — 42 of 42 checks passed
 
-188 checks total, zero failures, zero errored steps.
+234 checks total, zero failures, zero errored steps.
+
+### What `test/drive_assets.rb` covers
+
+The "Port custom symbolic icons, desktop entry and metainfo" commit added
+`Application#install_icon_theme` (registers `data/icons` on the real
+`Gtk::IconTheme` search path) and three new `data/` template files
+(`.desktop.in.in`, `.metainfo.xml.in.in`, plus the icon SVGs themselves).
+None of it has any dialog, page or menu of its own, so the four existing
+drivers never touched it — it had a file on disk and nothing that had ever
+run it. This driver builds the real app (which is what actually registers
+the search path), then:
+
+- asks the real `Gtk::IconTheme` to resolve all 18 custom symbolic icon
+  names the commit shipped, confirms the port's own `ICONS_DIR` is really on
+  the theme's search path, and confirms the 16 of those 18 names any widget
+  in `lib/` actually sets are all among the ones that resolve;
+- builds a real `Gtk::IconTheme#lookup_icon` call for `puzzle-piece-symbolic`
+  (the default extension icon) and confirms the returned `Gtk::IconPaintable`
+  is backed by a file under this port's own `data/icons`, not a system
+  fallback glyph — `has_icon?` alone would not catch a theme that answers
+  true but resolves to the broken-image icon;
+- reads the desktop entry and metainfo templates off disk and checks their
+  real content (group header, `Name`, `Exec`, `Icon`, `Type`,
+  `DBusActivatable`, `MimeType` for the desktop entry; a hand-rolled
+  balanced-tag walk plus the `id`, `launchable`, `name`,
+  `project_license` and `screenshot` elements for the metainfo — `rexml` is
+  not on this dev shell's Ruby load path, so well-formedness is checked
+  without it rather than skipped);
+- substitutes `@app_id@` the way meson's `configure_file` would and confirms
+  the substituted desktop entry's `Icon=` and the substituted metainfo's
+  `<id>`/`<launchable>` all land on the real `Application::APP_ID`.
+
+### A note on the two numbers corrected above
+
+Both `drive_detail.rb` (46 -> 51) and `drive_upgrade.rb` (50 -> 49) are
+numbers this file had previously recorded for a different commit of the
+scripts; re-running them against the code actually on disk this round
+produced different, verified counts. Recorded here rather than silently
+overwritten, per `accountability-ensurance.md`'s standing finding about this
+same file's numbers in an earlier round.
 
 ### What `test/drive_upgrade.rb` covers
 
