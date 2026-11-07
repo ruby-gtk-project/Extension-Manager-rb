@@ -278,6 +278,40 @@ GtkDriver.drive(application, shots: 'tmp/shots') do |d, app|
     view.zoom_picture.zoom_level = 1.0
   end
 
+  # ImageResolver#resolve is stubbed to nil above (every other step runs
+  # offline), but that stub only overrides #resolve — #handle_response, the
+  # method that actually turns bytes into a paintable, is untouched on the
+  # real class. Calling it directly here, with a hand-built animated GIF
+  # fixture (test/fixtures/animated.gif, no network involved), exercises the
+  # real decode path the "glycin" and "libglycin-gtk4" gems exist for:
+  # Gly::Loader parsing bytes, GlyGtk4.frame_get_texture turning a glycin
+  # frame into a real GdkTexture, and AnimatedPaintable's GLib::Timeout-driven
+  # advance from the first frame to the second. Upstream's previous
+  # GdkPixbuf-texture stand-in could only ever show a still first frame; this
+  # proves the real decoder is on the path, and that it animates.
+  animated_fixture = File.read(File.expand_path('fixtures/animated.gif', __dir__), mode: 'rb')
+  paintable = nil
+  first_frame = nil
+
+  d.step('a real ImageResolver decodes an animated GIF through glycin') do
+    paintable = ImageResolver.new.handle_response(animated_fixture)
+    d.check('a real AnimatedPaintable comes back') { paintable.is_a?(AnimatedPaintable) }
+    d.check('intrinsic size matches the fixture (2x2)') do
+      paintable.virtual_do_get_intrinsic_width == 2 && paintable.virtual_do_get_intrinsic_height == 2
+    end
+    first_frame = paintable.instance_variable_get(:@current_frame)
+    d.check('the first frame is a real GdkTexture from GlyGtk4, not a stand-in') do
+      first_frame.is_a?(Gdk::Texture)
+    end
+  end
+
+  d.step('its frame timer advances to the second glycin frame') do
+    second_frame = paintable.instance_variable_get(:@current_frame)
+    d.check('the frame changed once its delay elapsed') { !second_frame.equal?(first_frame) }
+    d.check('the new frame is still a real GdkTexture') { second_frame.is_a?(Gdk::Texture) }
+    paintable.stop
+  end
+
   d.step('win.show-main pops back to the installed/browse view') do
     window.activate_action('show-main', nil)
     d.check('main page showing') { window.navigation_view.visible_page == window.main_page }
