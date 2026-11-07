@@ -1,70 +1,120 @@
-# Extension Manager — component identification (re-run)
+# Extension Manager — component identification (re-run, round 3)
 
-Upstream ref confirmed: **`origin/master`** (there is no `origin/main` in this
-clone — `git ls-tree origin/main` fails with `fatal: Not a valid object name`;
-`origin/HEAD` points at `origin/ruby`). Every later report in this round
-treats `origin/main` as a mistaken name for `origin/master`.
+Upstream ref: **`origin/master`**. `origin/main` does **not exist** in this
+clone (`git ls-remote origin main` returns nothing; `git ls-tree origin/main`
+fails with `fatal: Not a valid object name`). `origin/HEAD` points at
+`origin/ruby`. Confirmed again this round, not taken on faith from the
+previous report. Every report in this round treats `origin/main` as a
+mistaken name for `origin/master`; the task description's `origin/main`
+instruction cannot be followed literally in this repo.
 
-Port branch: `ruby` @ `64c7398` (`Drive the detail view, author page and
-screenshot zoom end to end`).
+Port branch: `ruby` @ `f9d640c` (`Drive the upgrade assistant and GNOME Shell
+search provider end to end`).
 
-This supersedes `.reports/component-inventory.md`, which was written against
-`f848dc2` — two commits and ~2,900 lines of `lib/` ago (`e92c19c` ported the
-detail view, screenshot viewer, author page and crash reporter; `64c7398`
-drove them). That document's "Port status" and "Target file map" sections are
-now stale: they list `detail_view.rb`, `screenshot.rb`, `screenshot_view.rb`,
-`zoom_picture.rb`, `animated_paintable.rb`, `author_page.rb`,
-`comment_dialog.rb`, `versions_dialog.rb`, `backtrace.rb` and `unified_data.rb`
-as **not** existing. All ten now exist in `lib/`. Its component-level tables
-(widget/CSS/signal rows for each `.blp`+`.c` pair) are unaffected and still the
-correct upstream-side record — only the "what's missing" accounting at the
-bottom needed re-running.
+This supersedes `.reports/component-identification.md`'s previous version
+(written against `64c7398`, before the upgrade-assistant/search-provider
+commit) and the original `.reports/component-inventory.md` (written against
+`f848dc2`). Both of this round's two former gaps are now file-level present:
 
-## Current file-existence census (re-run against `lib/` at `64c7398`)
-
-34 `.rb` component files in `lib/` (plus `style.css`, `res/suggestions.txt`,
-and the gem-scaffold `extension_manager.rb` / `extension/manager/rb/version.rb`,
-excluded from this count as before).
-
-Of the 48 rows in the inventory's Target file map, **45 now exist, 3 do not**:
-
-| Upstream | Port file | Exists |
+| Upstream | Port file | Exists now |
 |---|---|---|
-| `src/exm-upgrade-assistant.blp` + `.c` | `lib/upgrade_assistant.rb` | **no** |
-| `src/exm-gnome-shell-search-provider.c` | `lib/gnome_shell_search_provider.rb` | **no** |
-| `po/*` | `po/` | **no** |
+| `src/exm-upgrade-assistant.blp` + `.c` | `lib/upgrade_assistant.rb` | **yes** |
+| `src/exm-gnome-shell-search-provider.c` | `lib/gnome_shell_search_provider.rb` | **yes** |
+| `po/*` | `po/` | **no — unchanged** |
 
-Every other row in that map (the application, window, Installed view, Browse
-view, Detail view, screenshot viewer, author page, comment/versions dialogs,
-all models and backends, the crash reporter and its capture) now has a port
-file. This file-existence count is **necessary, not sufficient** — see
-`.reports/component-parity.md` for whether the files that do exist reproduce
-upstream's widgets, CSS, signals and text.
+35 `.rb` component files in `lib/` now (up from 34), plus `style.css`,
+`res/suggestions.txt`, and the gem scaffold files.
 
-## Three further things with no port file at all, outside the Target file map
+## Remaining file-level gaps, re-verified this round
 
-The original inventory's component map and "Non-widget support" table name
-these; none has a port counterpart and none is in the 48-row map because they
-live under `data/`, not `src/`:
+### `po/` — still completely absent
 
-| Upstream | What it is | Port |
-|---|---|---|
-| `data/com.mattjakeman.ExtensionManager.desktop.in.in` | desktop entry; registers the `gnome-extensions://<uuid>` URI scheme that `exm_application_open` handles | absent — `find . -iname '*.desktop*'` returns nothing |
-| `data/com.mattjakeman.ExtensionManager.metainfo.xml.in.in` | appdata the About dialog's version/comments/developer list is built from | absent — `lib/extension_manager/application.rb:139` builds `Adwaita::AboutDialog` with no metainfo source |
-| `data/com.mattjakeman.ExtensionManager.gschema.xml.in` | GSettings schema for `width`/`height`/`is-maximized`/`sort-enabled-first` | absent — `lib/settings.rb` substitutes a JSON file under `XDG_CONFIG_HOME` instead of GSettings (same four keys and defaults, different mechanism — flagged in `component-parity.md`) |
+```
+find . -iname po -maxdepth 2   -> nothing
+```
 
-Confirmed by reading `lib/extension_manager/application.rb`: it has no `open`
-override and no `dbus_register`/`dbus_unregister` override. Upstream's
-`exm_application_open` (the URI-scheme handler) and its D-Bus service
-registration (behind which the search provider is exported) have **no code at
-all** in the port, not even a stub — this is a bigger gap than "the search
-provider class is unported": the application-level hook it would be exported
-through doesn't exist either.
+Upstream: `po/extension-manager.pot` (149 msgids, re-counted this round —
+`git show origin/master:po/extension-manager.pot | grep -c '^msgid "'` = 149)
+and `po/LINGUAS` (45 languages, re-counted — `git show
+origin/master:po/LINGUAS | tr ' ' '\n' | grep -c .` = 45). See
+`translation-parity.md`.
+
+### `data/` — present but only 2 of 30 upstream files
+
+```
+git ls-tree -r --name-only origin/master -- data/
+```
+lists 30 files: the desktop entry, the metainfo, the GSettings schema, the
+search-provider `.ini.in`, the D-Bus `.service.in`, two meson.build files,
+16 icon files under `data/icons/` (including the three app-icon variants and
+the symbolic icon), and 8 screenshot PNGs used by the metainfo/README.
+
+The port's `data/` has exactly:
+```
+data/com.mattjakeman.ExtensionManager.search-provider.ini.in
+data/com.mattjakeman.ExtensionManager.service.in
+```
+— the two files the search-provider commit needed to get `export_search_
+provider` working, and nothing else. Re-confirmed absent this round:
+
+- `com.mattjakeman.ExtensionManager.desktop.in.in` — the desktop entry that
+  registers the `gnome-extensions://<uuid>` URI scheme and the app's
+  launcher metadata (`Exec=`, `Icon=`, `Categories=`, `X-GNOME-UsesNotifications`).
+- `com.mattjakeman.ExtensionManager.metainfo.xml.in.in` — the About dialog's
+  real data source (version history, screenshots, developer/translator
+  credits).
+- `com.mattjakeman.ExtensionManager.gschema.xml.in` — the GSettings schema;
+  `lib/settings.rb` still substitutes a hand-rolled JSON file (same four
+  keys/defaults, different mechanism — see `component-parity.md`).
+- All 16 files under `data/icons/` — **the port ships no icon of any kind**,
+  including the application icon itself (`.svg`, `.Devel.svg`, `.Source.svg`,
+  `-symbolic.svg`) and the 12 action-glyph symbolic icons
+  (`check-round-outline-symbolic`, `clock-alt-symbolic`,
+  `donation-symbolic`, `external-link-symbolic`, `pip-in-symbolic`,
+  `pip-out-symbolic`, `session-modes-symbolic`, `software-update-available-
+  symbolic`, `star-filled/outline-rounded-symbolic`, `supported-symbolic`,
+  `unknown-symbolic`, `unsupported-symbolic`). Several of these names
+  (`supported-symbolic`, `unsupported-symbolic`, `unknown-symbolic`,
+  `pip-in`/`pip-out-symbolic`) are exactly the glyphs
+  `upgrade_result.rb`/`extension_toggle.rb`/`extension_row.rb` need for their
+  status icons — if the port references these icon names via GTK's themed
+  icon lookup (not bundled), whether they render is dependent on the host
+  icon theme shipping names with the same spelling, which was **not**
+  checked this round; grep below.
+
+```
+grep -rn "symbolic" lib/*.rb | grep -iE "supported|unsupported|unknown|pip-in|pip-out|session-modes|software-update"
+```
+This grep (run this round) confirms `lib/upgrade_assistant.rb` (3 hits:
+`software-update-available-symbolic`, `supported-symbolic`,
+`unsupported-symbolic`, `unknown-symbolic`), `lib/detail_view.rb`
+(`pip-out-symbolic`, `software-update-available-symbolic`,
+`session-modes-symbolic`), `lib/extension_row.rb`
+(`software-update-available-symbolic`) and `lib/versions_dialog.rb`
+(`supported-symbolic`) all set `icon_name =` to these exact strings — i.e.
+the port depends on these icons existing *somewhere* findable by GTK's icon
+theme at runtime, and the port itself supplies none of them. On a system
+theme without them, the icons silently fall back to the GTK "broken image"
+glyph or nothing. This was not previously called out this specifically; it
+sharpens the existing "no icons" line into a named runtime risk.
+
+### The application-level `open` override — still absent
+
+```
+grep -n "def open\b" lib/extension_manager/application.rb   -> no match
+grep -rn "gnome-extensions" lib/ exe/                        -> no match
+```
+Re-confirmed this round. `exm_application_open` (upstream's
+`gnome-extensions://<uuid>` URI-scheme handler, which forwards to
+`win.show-detail`) has no port code at all, stub or otherwise. This is
+separate from and unaffected by the search-provider commit, which added
+`dbus_register`/`dbus_unregister` (for the search provider) but not `open`.
 
 ## Verdict
 
-File-level coverage improved from 35/48 (last round) to 45/48. The three
-remaining gaps — `upgrade_assistant.rb`, `gnome_shell_search_provider.rb`,
-`po/` — plus the `data/` triad and the missing `app.open`/D-Bus-registration
-hooks are carried forward as open items into `component-parity.md`,
-`translation-parity.md` and `accountability-ensurance.md`.
+File-level coverage is now 46/48 against the original inventory's Target file
+map (both of the previous round's two component gaps closed), but the wider
+census — `data/` (28 of 30 files missing, including every icon), `po/` (all
+of it), and the `open`/URI-scheme hook — remains exactly as open as before.
+Carried into `component-parity.md`, `translation-parity.md` and
+`accountability-ensurance.md`.

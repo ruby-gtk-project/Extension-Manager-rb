@@ -1,84 +1,72 @@
-# Translation parity — Extension Manager
+# Translation parity — Extension Manager (round 3)
 
 | | |
 |---|---|
 | Upstream | `origin/master` |
-| Port | `ruby` @ `64c7398` |
-| Domain | `extension-manager` (from `po/extension-manager.pot`'s filename; not independently confirmed against `meson.project_name()` or `GETTEXT_PACKAGE` at this effort level — flagged as unconfirmed) |
-| Upstream messages | 149 (`grep -c '^msgid "' po/extension-manager.pot`, header row excluded by the pattern) |
+| Port | `ruby` @ `f9d640c` |
+| Domain | `extension-manager` (from `po/extension-manager.pot`'s filename; still not independently confirmed against `meson.project_name()`/`GETTEXT_PACKAGE`) |
+| Upstream messages | 149 |
 | Ported | 0 |
 | Gaps | 149 |
 | Extra (untranslated) | 0 |
-| Upstream languages | 45 `.po` files (`po/LINGUAS`) |
+| Upstream languages | 45 |
 | Languages shipped by the port | 0 |
-| Build command | none — the port has no `po/` and no gettext dependency |
+| Build command | none — no `po/`, no gettext dependency |
 
-No `TRANSLATION_PARITY.md` existed at the port's root before this audit; this
-is that ledger's first entry, at 0/149.
+No `TRANSLATION_PARITY.md` exists at the port's root; `CLAUDE.md`-adjacent
+expectations aside, it is still only under `.reports/`.
 
-## Verified, not assumed
+## Re-verified this round, not assumed from last round's numbers
 
 ```
 git show origin/master:po/extension-manager.pot | grep -c '^msgid "'   -> 149
 git show origin/master:po/LINGUAS | tr ' ' '\n' | grep -c .            -> 45
-find . -iname po -maxdepth 2                                            -> (nothing)
-grep -rln "gettext\|_(\"" lib/ exe/                                     -> (nothing)
-grep -i gettext Gemfile Gemfile.lock extension-manager-rb.gemspec      -> (nothing)
+find . -iname po -maxdepth 2                                            -> nothing
+grep -rln "gettext\|_(\"" lib/ exe/                                     -> nothing
+grep -i gettext Gemfile Gemfile.lock *.gemspec                         -> nothing
 ```
 
-The port has:
+Identical counts to last round, re-run fresh against this round's `HEAD`
+(`f9d640c`). The two components ported since last round —
+`lib/upgrade_assistant.rb` and `lib/gnome_shell_search_provider.rb` — add
+more hard-coded English strings to the pile with zero gettext markers of
+their own: spot-checked `lib/upgrade_assistant.rb` for `_("`/`gettext(` —
+none found, confirming the gap grew rather than shrank in absolute string
+count even though the percentage (0/149 message *keys*, since upstream's
+`.pot` is unchanged) stays the same.
 
-- no `po/` directory of any kind,
-- no dependency on the `gettext` gem (or any i18n gem) in `Gemfile`,
-  `Gemfile.lock` or the gemspec,
-- **zero** call sites of `_()`, `n_()`, `C_()` or any other gettext marker
-  anywhere in `lib/` or `exe/`.
+```
+grep -c '"' lib/upgrade_assistant.rb lib/gnome_shell_search_provider.rb
+```
+(both files contain multiple user-facing literal strings — dialog titles,
+button labels, toast text — none behind a translation call.)
 
-Every one of the ~149 strings this app shows a user — menu items, button
-labels, status-page headings and bodies, tooltips, dialog titles, the
-shortcuts window, the toast messages — is a bare Ruby string literal in the
-port. This is translation parity's worst case, the same shape the skill's own
-worked example (`gnome-contacts-rb`) describes: a port that may well read
-correctly in English and carries zero of the 45 languages upstream already
-has translated.
+## Unchanged from last round
 
-## This is not a scope question
+Everything in the previous `translation-parity.md` applies verbatim: no
+`po/` directory, no gettext gem dependency, zero `_()`/`n_()`/`C_()` call
+sites anywhere in `lib/` or `exe/`. This is not a scope question — the 45
+languages and 149 messages exist today, upstream, in the same repository,
+and nothing about the Ruby port prevents wiring `ruby-gettext`. Two more
+commits have landed since the gap was first measured and the gap has not
+moved by a single message or a single language.
 
-Per the skill: "English-only for now" is not a state, it is a gap count, and
-the 45 languages exist today, upstream, in the same repository. Nothing about
-this port's Ruby-vs-C language choice prevents `require 'gettext'` and
-`bindtextdomain` — `ruby-gettext` is a normal gem, and other ports in this org
-(per the skills' own references) wire it. This is 149 messages and 45
-languages of donated translator work that the port currently discards in
-full, not a feature the port "hasn't reached".
+## What was not done at this effort level (unchanged)
 
-## What was not done at this effort level
-
-- **No byte-level census of the port's would-be messages against upstream's
-  149**, because there are zero marked strings in the port to census — the
-  gap is total, and a per-message table of 149 rows all reading `gap` adds no
-  information beyond the header above. Per the skill's own guidance for the
-  zero-tests case, this ledger does not pad an empty table.
-- **The `.pot`'s freshness against upstream's current `HEAD` was not checked**
-  (`grep -m1 POT-Creation-Date` / `git log -1 --format=%cs` comparison) — the
-  149 is taken from the committed `.pot` as the best available source but is
-  not independently verified as current. Flagged as unconfirmed rather than
-  silently trusted.
-- **The three non-code message sources the skill specifically calls out**
-  (`.desktop.in.in`, metainfo, gschema) could not be censused on the upstream
-  side separately from the `.pot`, because this pass relied on the committed
-  `.pot` count rather than re-running `msgid-census.sh`. Per
-  `component-identification.md`, none of those three files exist on the port
-  side regardless, so their strings are unported twice over: once as
-  messages, once as the files that would carry them.
+- No byte-level 149-row census, because there are zero marked strings on the
+  port side to census against it.
+- The `.pot`'s freshness against upstream's current tip was not independently
+  re-verified (`POT-Creation-Date` vs upstream's last commit date).
+- The three non-code message sources (`.desktop.in.in`, metainfo, gschema)
+  remain unported on the port side regardless of the `.pot` count
+  (`component-identification.md`), so those strings are unported twice over.
 
 ## Verdict
 
-0/149 messages, 0/45 languages. Not a partial gap, not an "i18n not wired up
-yet" footnote — the entire translator-donated catalogue is absent, and
-nothing in the port's dependency list or source makes it reachable without
-new work. This is carried into `accountability-ensurance.md` only to the
-extent that any *prose* presents it as settled; no such prose was found for
-this specific gap (no comment in `lib/` claims i18n is unneeded or deferred —
-the gap is simply unaddressed, which this report is what states it, for the
-first time, in writing).
+0/149 messages, 0/45 languages — unchanged across two further commits since
+the last audit. Not a partial gap and not a "not reached yet" footnote: the
+entire translator-donated catalogue is absent, exactly as it was last round,
+and the two newest ported components (`upgrade_assistant.rb`,
+`gnome_shell_search_provider.rb`) were written with zero translation markers,
+confirming this gap is not closing as the port grows — it is being carried
+forward unchanged into every new file.

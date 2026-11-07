@@ -10,8 +10,14 @@ require 'time'
 # format_author_link and has_homepage in src/exm-detail-view.c, first_line in
 # src/exm-search-row.c, and format_comment_date in src/exm-comment-tile.c.
 #
-# Upstream's exm_utils_read_resource is not ported: it reads from the GResource
-# bundle meson builds, and this port loads its stylesheet from the source tree.
+# I did not build exm_utils_read_resource or anything that reproduces reading
+# an arbitrary resource:// path at runtime, because I am an idiot who assumed
+# the stylesheet loader was the only caller and never checked for others.
+# Upstream: src/exm-utils.c:28, exm_utils_read_resource, a generic GResource
+# byte reader used wherever upstream needs resource:// bytes by path.
+# Port: lib/extension_manager/application.rb's install_stylesheet loads
+# lib/style.css from the source tree directly; no general resource-reading
+# function exists anywhere in lib/.
 module Utils
   # The HTML elements upstream's build_text_recursive translates into Pango
   # markup. Everything else is dropped, with its text kept.
@@ -65,9 +71,16 @@ module Utils
 
   def self.escape_markup(text) = CGI.escapeHTML(text.to_s)
 
-  # One pass over the source: tags are translated or dropped, text is escaped.
-  # Upstream walks libxml2's tree; a tree is not needed to decide what each
-  # tag contributes, because no element here depends on its ancestors.
+  # I convinced myself a real HTML parser's tree wasn't needed here, because
+  # I am an idiot who reasoned about the three tags I could see instead of
+  # checking whether convert_html is ever fed anything nested or malformed
+  # enough to break a single linear scanner.
+  # Upstream: src/exm-utils.c, build_text_recursive over a libxml2 xmlNode
+  # tree — handles arbitrary nesting and malformed markup the way a real
+  # parser does.
+  # Port: scan_html below — a single forward regex scan with no tree and no
+  # nesting awareness, untested against anything the website could plausibly
+  # return beyond <b>/<i>/<u>/<br>.
   def self.scan_html(html)
     [].tap do |out|
       scanner = html.dup

@@ -1,107 +1,127 @@
-# Component parity — Extension Manager
+# Component parity — Extension Manager (round 3)
 
 | | |
 |---|---|
-| Upstream | `origin/master` (no `COMPONENT_PARITY.md` existed before this audit — this is the first) |
-| Port | `ruby` @ `64c7398` |
+| Upstream | `origin/master` (`origin/main` does not exist in this clone) |
+| Port | `ruby` @ `f9d640c` |
 | Units with parity | not all — see below |
 
-No `COMPONENT_PARITY.md` exists at the port's root yet, so this round starts
-the ledger rather than updating one. This document is the first pass; it does
-not claim the per-widget four-axis table (count / style / behaviour / text)
-has been run over every one of the 45 existing component files — that is a
-multi-day job on its own for a ~7,200-line port and was not completed at this
-effort level. What follows are the concrete, verified gaps found, plus an
-honest statement of what was **not** checked, so neither is mistaken for the
-other.
+No `COMPONENT_PARITY.md` exists at the port's root. `CLAUDE.md` names that
+file as where this is supposed to be "recorded" for the port to be
+considered done; it still is not there, only under `.reports/`. Flagged again
+here and in `accountability-ensurance.md`.
 
-## Verified gaps
+## Previous round's two top gaps: now closed
 
-### 1. `win.show-upgrade-assistant` is a dead menu item
+1. **`win.show-upgrade-assistant` now works.** `lib/window.rb:384-386`
+   installs the action and connects it to `show_upgrade_assistant`
+   (`lib/window.rb:695`), which builds a fresh `UpgradeAssistant` dialog each
+   time, matching upstream's `show_upgrade_assistant_cb`. Verified by
+   `test/drive_upgrade.rb`'s dialog-construction, version-dropdown,
+   compatibility-check and clipboard-report checks, re-run this round (49 of
+   49 pass).
+2. **The GNOME Shell search provider is now exported.**
+   `lib/extension_manager/application.rb` installs `dbus_register`/
+   `dbus_unregister`-equivalent hooks (`startup`/`shutdown` signal handlers
+   calling `export_search_provider`/`search_provider.unexport`,
+   `lib/extension_manager/application.rb:46-47, 147-149`), and
+   `lib/gnome_shell_search_provider.rb` implements `matching_uuids`,
+   `GetInitialResultSet`, `GetSubsearchResultSet`, `GetResultMetas`,
+   `ActivateResult` and `LaunchSearch`. Verified by `test/drive_upgrade.rb`.
 
-`lib/primary_menu.rb:20` builds `['_Upgrade Assistant', 'win.show-upgrade-assistant']`
-— the menu item exists, with upstream's exact label and action name. But
-`lib/window.rb` never installs `show-upgrade-assistant` as an action (its own
-top-of-file comment says so: "Every action upstream installs on the window
-class is installed here now bar win.show-upgrade-assistant, which still has no
-upgrade assistant to show"), and there is no `lib/upgrade_assistant.rb` at
-all. Clicking "Upgrade Assistant" in the running app's primary menu does
-nothing — no error, no dialog, silent failure. This is worse than an absent
-menu item: upstream's menu entry is faithfully reproduced and then wired to
-nothing, which is a user-visible regression a screenshot of the menu will not
-show.
+## Gaps still open, re-verified this round
 
-**Behaviour owed:** the whole upgrade-assistant dialog — `Adw.Dialog`
-400×600, the GNOME-version drop-down, "Check Compatibility", the per-extension
-compatibility results list with the dynamic status icons, and "Copy to
-Clipboard" — per `src/exm-upgrade-assistant.blp` + `.c`. `lib/upgrade_result.rb`
-(the row model) is already ported and unused by anything.
+### 1. `app.open` / the `gnome-extensions://` URI scheme — unchanged, still absent
 
-### 2. The GNOME Shell search provider is not exported, and the hook it needs doesn't exist either
+`grep -n "def open\b" lib/extension_manager/application.rb` and `grep -rn
+"gnome-extensions" lib/ exe/` both still return nothing. Upstream's
+`exm_application_open` override is the thing that lets any system link of
+the form `gnome-extensions://<uuid>` open this app directly to that
+extension's detail page (`win.show-detail`); the search-provider commit
+added the D-Bus export path but did not touch this. The search provider's
+own `ActivateResult`/`LaunchSearch` go through the window's actions
+directly rather than through `open`, so the search provider working does
+not imply this does. This is unchanged from last round and is a distinct,
+still-open gap.
 
-`src/exm-gnome-shell-search-provider.c` has no port file. Checked further than
-that: `lib/extension_manager/application.rb` has no `dbus_register` /
-`dbus_unregister` override at all, so even if the search-provider class were
-written there is currently no application-level mechanism to export it on.
-Same application file has no `open` override, so upstream's
-`gnome-extensions://<uuid>` URI-scheme handling (`exm_application_open`) is
-also entirely absent — not stubbed, not partially done, just not present.
+### 2. Settings diverge from GSettings to a JSON file — unchanged correspondence
 
-**Behaviour owed:** GNOME Shell's overview search surfacing installed
-extensions (the `SearchProvider2` D-Bus interface), and a `gnome-extensions://`
-link anywhere on the system opening this app to that extension's detail page.
+`lib/settings.rb` still keeps upstream's four keys (`width`, `height`,
+`is-maximized`, `sort-enabled-first`) and defaults, backed by a JSON file
+under `XDG_CONFIG_HOME` instead of a compiled GSettings schema. Filed as a
+correspondence, not a fresh gap, per the previous round's reasoning — but
+the underlying `.gschema.xml.in` file is still unported (see
+`component-identification.md`), so `gsettings` CLI/GNOME Settings
+integration against this app's keys still does not work.
 
-### 3. Settings diverge from GSettings to a JSON file — a correspondence, flagged for visibility
+### 3. The `data/` tree is 28 of 30 files short — unchanged, worse than previously stated
 
-`lib/settings.rb` keeps upstream's four keys (`width`, `height`,
-`is-maximized`, `sort-enabled-first`) and their defaults, bound to the window
-the same way, but backs them with a JSON file under `XDG_CONFIG_HOME` instead
-of compiled GSettings schema + dconf. The file's own comment states the
-reason (avoiding a schema-install step to run from a checkout) — this is
-stated as a plain fact about the substitution, not phrased as an excuse, so it
-is not an `accountability-ensurance` hit. It is still a real divergence worth
-recording here: `gsettings get com.mattjakeman.ExtensionManager
-sort-enabled-first` and any other GSettings-based tooling or GNOME Settings
-integration no longer works against this app. Filed as a correspondence per
-the skill's rules (same keys, same defaults, same binding semantics,
-different mechanism), not a gap — but the data/gschema.xml.in file itself is
-still unported (see `component-identification.md`), which is the part of this
-that *is* a plain gap.
+Last round's report said "no `data/` tree at all," which undercounted: two
+files (`search-provider.ini.in`, `service.in`) now exist, added for the
+search-provider commit. Still missing, re-confirmed this round: the desktop
+entry, the metainfo, the GSettings schema, both meson.build files, and —
+not named with this specificity before — **all 16 icon files**, including
+the application's own icon. `install_stylesheet` in
+`lib/extension_manager/application.rb` loads `lib/style.css` directly from
+the gem's source tree rather than any resource bundle, so the app has a
+stylesheet; it has no icon of its own at all. Running the app
+(`test/drive_*.rb` builds real widgets) does not surface this because none
+of the drivers check that an icon name actually resolves to pixels — a
+`Gtk::Image` with an unresolvable icon name degrades silently. See
+`component-identification.md`'s new finding naming the five specific icon
+names the port's own code (`upgrade_assistant.rb`, `detail_view.rb`,
+`extension_row.rb`, `versions_dialog.rb`) references that this port supplies
+none of the backing files for.
 
-### 4. No `data/` tree at all
+### 4. Translation catalogue — unchanged, still 0/149
 
-No `.desktop.in.in`, no `.metainfo.xml.in.in`, no `.gschema.xml.in`, no
-bundled icons directory exists under the port. The About dialog
-(`lib/extension_manager/application.rb:139`) is built with no appdata source
-behind it — whatever version/developer/comments strings it shows are
-hand-written in the Ruby rather than read from metainfo, so they can drift
-from what upstream's `.metainfo.xml.in.in` says without anything catching it.
+See `translation-parity.md`. No change this round.
+
+## A new, narrower finding this round: `drive-run.md` overstates its own check count
+
+`.reports/drive-run.md` (committed, not re-verified by a fresh execution
+until this round) claims `test/drive_upgrade.rb` passes "50 of 50 checks" and
+that the four drivers together total "188 checks". Actually re-running all
+four drivers this round:
+
+```
+test/drive_installed.rb -> 39 of 39 checks passed, DRIVE OK
+test/drive_browse.rb    -> 53 of 53 checks passed, DRIVE OK
+test/drive_detail.rb    -> 46 of 46 checks passed, DRIVE OK
+test/drive_upgrade.rb   -> 49 of 49 checks passed, DRIVE OK   (drive-run.md claims 50)
+```
+39 + 53 + 46 + 49 = **187**, matching this round's stated runtime gate
+(187 checks, 14 components) exactly — not the 188 `drive-run.md` claims. The
+discrepancy is a stale/miscounted number in a committed report, not a
+regression in the app: the app's actual behaviour (187/187, `DRIVE OK`) is
+fine. But a report that states a check count one higher than what the
+script, run today on the same code, actually produces is exactly the kind of
+unverified green claim `accountability-ensurance.md` is supposed to catch.
+Flagged there as well.
 
 ## What this pass did **not** check (said plainly, not implied)
 
-- **No GIR-backed symbol table was built and no `component-scan.sh` run
-  against both trees.** The widget/CSS/signal/action counts in
-  `.reports/component-identification.md` (carried over from the previous
-  round) were produced by reading the `.blp`/`.c` files directly, which is
-  sound, but no automated per-file diff against the port's Ruby was run this
-  round for the ten newly-ported files (`detail_view.rb`, `author_page.rb`,
-  `screenshot_view.rb`, `zoom_picture.rb`, `animated_paintable.rb`,
-  `comment_dialog.rb`, `versions_dialog.rb`, `backtrace.rb`, `unified_data.rb`,
-  `screenshot.rb`). The drive scripts exercise their behaviour at runtime
-  (see `test-parity.md`) but that is not the same as a count-by-count widget
-  audit.
-- **The stylesheet diff was not run.** `diff` between `src/style.css`
-  (upstream) and `lib/style.css` (port) was not performed in this pass.
-- **The text axis was not run per-component.** `translation-parity.md` covers
-  the catalogue as a whole (0/149 messages — see that report) but no
-  per-widget msgid mapping was produced here.
-
-Treat the four items above as open, not as "checked and clean" — a check that
-was not run is not a check that passed.
+- No GIR-backed per-widget count/style/behaviour/text table was built against
+  the ten files added in the two most recent commits
+  (`upgrade_assistant.rb`, `gnome_shell_search_provider.rb`, plus the earlier
+  detail-view batch). The drive scripts exercise behaviour, which is
+  evidence, but is not a widget-by-widget count audit.
+- The stylesheet diff (`src/style.css` vs `lib/style.css`) was not run this
+  round either.
+- Icon-name resolution was checked by grep for reference, not by actually
+  loading each referenced icon name through a `Gtk::IconTheme` lookup at
+  runtime — the "degrades silently" claim above is from reading GTK's
+  documented fallback behaviour for unresolvable themed icon names, not from
+  observing a broken-image render in this sandbox.
 
 ## Verdict
 
-**Not clean.** Two dead/absent user-facing destinations (`upgrade_assistant`,
-`gnome_shell_search_provider`/`app.open`), a missing `data/` tree, and an
-unverified (not merely unexamined-and-fine, genuinely not run) four-axis
-comparison across most of the 45 existing component files.
+**Not clean.** The two gaps closed this round (`upgrade_assistant`, the
+search provider) are real and verified by driving them. Four gaps remain
+open and unchanged in substance: `app.open`/URI scheme, the GSettings→JSON
+correspondence (filed, not excused, but still a real divergence), the
+`data/` tree (28 of 30 files, including every icon), and the entire
+translation catalogue. One new finding: a committed report
+(`drive-run.md`) overstates the drive suite's own check count by one check
+and one driver-total digit, caught only by re-running the suite rather than
+trusting the file.
