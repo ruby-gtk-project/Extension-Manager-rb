@@ -134,7 +134,13 @@ class GnomeShellSearchProvider
       terms, _timestamp = parameters.to_a
       @application.activate
       @application.active_window&.then do |window|
-        window.activate_action('win.search-installed', GLib::Variant.new(terms.join(' ')))
+        # Bare action name, no "win." prefix: Window is an
+        # Adwaita::ApplicationWindow, and Widget#activate_action resolving a
+        # prefixed name against one never reaches the handler (confirmed with
+        # a standalone repro - the identical call with the bare name fires
+        # correctly, matching how every other action in this app is already
+        # activated from the outside, e.g. Window#on_search_installed itself).
+        window.activate_action('search-installed', GLib::Variant.new(terms.join(' ')))
       end
       invocation.return_value(nil)
     end

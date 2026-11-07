@@ -433,7 +433,7 @@ class UpgradeAssistant < Adwaita::Dialog
     end
 
     def copy_to_clipboard
-      Gdk::Display.default.clipboard.set_text(report_text)
+      Gdk::Display.default.clipboard.set(report_text)
       toast_overlay.add_toast(Adwaita::Toast.new(COPIED_TOAST))
     end
 

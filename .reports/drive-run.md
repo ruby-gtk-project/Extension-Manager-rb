@@ -3,15 +3,102 @@
 Produced with the `ruby-gtk-testing` skill in `.claude/skills/`, driving the
 real app headlessly under `nix develop --command xvfb-run -a ruby test/drive_*.rb`.
 
-## Result
+## Result (this run, after the upgrade-assistant/search-provider commit)
 
-All three drive scripts end in `DRIVE OK`:
+All four drive scripts end in `DRIVE OK`:
 
 - `test/drive_installed.rb` — 39 of 39 checks passed
 - `test/drive_browse.rb` — 53 of 53 checks passed
-- `test/drive_detail.rb` (new, written for this run) — 46 of 46 checks passed
+- `test/drive_detail.rb` — 46 of 46 checks passed
+- `test/drive_upgrade.rb` (new, written for this run) — 50 of 50 checks passed
 
-138 checks total, zero failures, zero errored steps.
+188 checks total, zero failures, zero errored steps.
+
+### What `test/drive_upgrade.rb` covers
+
+Everything added by the "Port the upgrade assistant dialog and the GNOME
+Shell search provider" commit, which the three existing drivers never
+reached: `UpgradeAssistant` end to end (`win.show-upgrade-assistant`, the
+version drop-down and its guessed-newest-release selection, the "no
+extensions installed" toast, a full compatibility check against canned
+`VersionsProvider` data for five extensions covering all three outcomes —
+supported, unsupported, and unknown/unlisted — the user/system group split,
+the progress bar and summary text, the clipboard report, and that a second
+run starts from a brand-new dialog instance) and `GnomeShellSearchProvider`'s
+own logic (`matching_uuids`' case-folded, has-prefs-gated, every-term-must-
+match search over name/description/uuid, `GetInitialResultSet`,
+`GetSubsearchResultSet`, `GetResultMetas`, `ActivateResult` including the
+unknown-uuid no-op case, and `LaunchSearch`).
+
+### Three real bugs found and fixed by actually running this code
+
+All three were invisible to `ruby -c`/`require` and were only found by
+exercising the dialog/provider logic end to end for the first time.
+
+1. **`UpgradeAssistant#alphabetical_sorter`'s `Gtk::PropertyExpression.new
+   (UpgradeResult, nil, 'name')` crashed** with `Gtk-CRITICAL: Type
+   UpgradeResult does not have a property named 'name'`, because
+   `UpgradeResult#name` was a plain Ruby method, not a registered GObject
+   property — `Gtk::PropertyExpression` introspects the type's property
+   list, it does not call the Ruby method directly. Upstream's
+   `exm-upgrade-result.c` registers `name` as a real
+   `g_param_spec_string(..., G_PARAM_READABLE)` property with a
+   `get_property` vfunc computing it from the local/web data; this port had
+   dropped the registration while keeping the computed method. **Fixed** in
+   `lib/upgrade_result.rb` by adding `install_property(GLib::Param::String
+   .new('name', ..., GLib::Param::READABLE))` alongside the existing
+   `#name` method — confirmed with a standalone repro that the Ruby
+   bindings resolve a declared-but-unbacked-by-ivar property by calling the
+   same-named Ruby method, so no `get_property` override was needed.
+2. **`UpgradeAssistant#copy_to_clipboard` crashed on every use** with
+   `undefined method 'set_text' for an instance of GdkX11Clipboard` —
+   `Gdk::Clipboard` has no `#set_text` in the Ruby bindings; the method is
+   `#set`, which takes the value directly (confirmed by reading
+   `Gdk::Clipboard.instance_methods(false)` and a standalone repro). **Fixed**
+   in `lib/upgrade_assistant.rb` by calling `.set(report_text)` instead.
+3. **`GnomeShellSearchProvider#launch_search` never actually switched the
+   window to the installed search**, because it called
+   `window.activate_action('win.search-installed', ...)` — `Window` is an
+   `Adwaita::ApplicationWindow`, and (confirmed with a standalone repro)
+   `Widget#activate_action` resolving a `"win."`-prefixed name against one
+   silently does nothing, while the identical call with the bare action name
+   fires correctly. Every other caller in this codebase already activates
+   window actions by the bare name (`search-online`, `show-upgrade-
+   assistant`, etc.); this was the one caller that had drifted from that
+   convention. **Fixed** in `lib/gnome_shell_search_provider.rb` by dropping
+   the `"win."` prefix.
+
+### A real binding gap, not a port bug
+
+`GLib::Variant#value` raises `NotImplementedError: TODO: GVariant({sv}) ->
+Ruby` for any variant containing an `a{sv}`/`{sv}` member — which is exactly
+what `GetResultMetas` returns. The provider's own `gnome_shell_search_provider.rb`
+already documents working around the write side of this gap (building the
+GVariant from printed text instead of constructing it as Ruby objects);
+there is no corresponding read-side decoder at all, in either direction, for
+a dict-of-variants. `test/drive_upgrade.rb`'s `GetResultMetas` checks work
+around this by asserting against the GVariant's printed (`.to_s`) text form
+instead of decoding it, which is a test-side accommodation, not a change to
+what the provider sends over the bus.
+
+### Still not run
+
+- The real `org.gnome.Shell.SearchProvider2` D-Bus path itself
+  (`GnomeShellSearchProvider#export`/`handle_method_call` reached through an
+  actual `Gio::DBusConnection`) — there is no GNOME Shell, and no guaranteed
+  D-Bus session bus, in this sandbox. `test/drive_upgrade.rb` instead calls
+  `matching_uuids`, `initial_result_set`, `subsearch_result_set`,
+  `result_metas`, `activate_result` and `launch_search` directly with plain
+  Ruby arrays in place of GDBus-decoded parameter tuples (every one of those
+  methods only ever calls `#to_a` on its `parameters` argument, which a
+  plain Array already answers), exercising every line of the provider's own
+  logic without a bus. The commit's own message records that a real
+  `dbus-run-session` + `gdbus call` round trip against
+  `--gapplication-service` was done separately and all five methods replied
+  with correctly-typed D-Bus values.
+- `bundle exec rubocop` and the RSpec suite — unchanged from the previous
+  run: this sandbox's dev shell has neither `rubocop` nor `kettle/test/rspec`
+  installed, independent of anything in this change.
 
 ## What `test/drive_detail.rb` covers
 

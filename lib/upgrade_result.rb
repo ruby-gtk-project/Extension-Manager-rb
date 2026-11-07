@@ -8,9 +8,24 @@ require 'adwaita'
 # Ported from upstream's src/exm-upgrade-result.c, whose only read-only
 # property is `name` — taken from the local extension when there is one and
 # from the web data otherwise, which is what lets the assistant list
-# extensions that are installed but no longer published.
+# extensions that are installed but no longer published. Registered as a
+# real GObject property (upstream's g_param_spec_string("name", ..., NULL,
+# G_PARAM_READABLE)), not a plain Ruby method, because
+# UpgradeAssistant#alphabetical_sorter builds a Gtk::PropertyExpression
+# against it, and that introspects the type's registered properties rather
+# than calling the Ruby method directly.
 class UpgradeResult < GLib::Object
   type_register
+
+  install_property(
+    GLib::Param::String.new(
+      'name',
+      'Name',
+      'Name',
+      nil,
+      GLib::Param::READABLE,
+    ),
+  )
 
   attr_accessor :web_data, :local_data
 
