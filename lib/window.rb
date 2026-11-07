@@ -29,7 +29,10 @@ require_relative 'types'
 # bar win.show-upgrade-assistant, which still has no upgrade assistant to
 # show: win.show-detail, win.show-author, win.show-main and win.show-screenshot
 # push the detail view, the author page or the one shared screenshot view, and
-# the three screenshot.zoom-* actions delegate to whichever view is showing.
+# the three win.zoom-* actions delegate to whichever view is showing. Upstream
+# groups those three under its own "screenshot" action prefix; see
+# `zoom_in_action` below for why this port keeps them as plain window actions
+# instead.
 #
 # The keyboard bindings that survive that are upstream's too: Ctrl+F opens the
 # installed search or focuses the browse entry depending on what is showing,
@@ -212,8 +215,8 @@ class Window < Adwaita::ApplicationWindow
   def screenshot_view
     @screenshot_view ||= ScreenshotView.new.tap do |view|
       view.on_zoom_changed do |zoom_level|
-        action_set_enabled('screenshot.zoom-in', zoom_level < view.zoom_level_max)
-        action_set_enabled('screenshot.zoom-out', zoom_level > view.zoom_level_min)
+        zoom_in_action.enabled = zoom_level < view.zoom_level_max
+        zoom_out_action.enabled = zoom_level > view.zoom_level_min
       end
     end
   end
@@ -377,15 +380,32 @@ class Window < Adwaita::ApplicationWindow
     end
   end
 
-  # The "screenshot" group every screenshot.zoom-* button and Ctrl+Plus/
-  # Minus/0 points at, delegating to whichever ScreenshotView the window
-  # shares across every detail view and the screenshot view itself.
-  def screenshot_actions
-    @screenshot_actions ||= Gio::SimpleActionGroup.new.tap do |group|
-      group.add_action(zoom_action('zoom-in') { screenshot_view.zoom_in })
-      group.add_action(zoom_action('zoom-out') { screenshot_view.zoom_out })
-      group.add_action(zoom_action('zoom-reset') { screenshot_view.zoom_reset })
-    end
+  # Every screenshot.zoom-* button and Ctrl+Plus/Minus/0 points at these,
+  # delegating to whichever ScreenshotView the window shares across every
+  # detail view and the screenshot view itself.
+  #
+  # Upstream installs these on its own window class with
+  # gtk_widget_class_install_action, under a "screenshot" prefix a template
+  # child's `action-name` reaches by walking the widget tree. The Ruby
+  # bindings' equivalent, inserting a separate Gio::SimpleActionGroup with
+  # `insert_action_group('screenshot', ...)`, builds the group correctly —
+  # activating it directly works — but neither a button's `action-name` nor
+  # `Widget#activate_action` ever reaches it afterwards, on a
+  # Gtk::ApplicationWindow specifically; the same group on a bare Gtk::Window
+  # resolves fine. Rather than ship buttons and a keyboard shortcut that
+  # would be dead in the real app, these live as ordinary window actions
+  # instead (the same mechanism show-detail and the rest already use, which
+  # is known to work), reached as "win.zoom-in" and so on.
+  def zoom_in_action
+    @zoom_in_action ||= zoom_action('zoom-in') { screenshot_view.zoom_in }
+  end
+
+  def zoom_out_action
+    @zoom_out_action ||= zoom_action('zoom-out') { screenshot_view.zoom_out }
+  end
+
+  def zoom_reset_action
+    @zoom_reset_action ||= zoom_action('zoom-reset') { screenshot_view.zoom_reset }
   end
 
   def shortcuts
@@ -394,9 +414,9 @@ class Window < Adwaita::ApplicationWindow
       controller.add_shortcut(search_shortcut)
       controller.add_shortcut(show_page_shortcut(Gdk::Keyval::KEY_1, 'installed'))
       controller.add_shortcut(show_page_shortcut(Gdk::Keyval::KEY_2, 'browse'))
-      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_plus, :control_mask, 'screenshot.zoom-in'))
-      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_minus, :control_mask, 'screenshot.zoom-out'))
-      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_0, :control_mask, 'screenshot.zoom-reset'))
+      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_plus, :control_mask, 'win.zoom-in'))
+      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_minus, :control_mask, 'win.zoom-out'))
+      controller.add_shortcut(named_action_shortcut(Gdk::Keyval::KEY_0, :control_mask, 'win.zoom-reset'))
     end
   end
 
@@ -454,7 +474,9 @@ class Window < Adwaita::ApplicationWindow
     end
 
     def install_window_actions
-      insert_action_group('screenshot', screenshot_actions)
+      add_action(zoom_in_action)
+      add_action(zoom_out_action)
+      add_action(zoom_reset_action)
       add_action(show_page_action)
       add_action(show_error_action)
       add_action(show_error_dialog_action)

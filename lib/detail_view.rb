@@ -702,7 +702,7 @@ class DetailView < Adwaita::NavigationPage
         ext_icon.grab_focus
         activate_action(
           'win.show-author',
-          GLib::Variant.parse("(#{@data.creator_id.to_i}, \"#{username}\", \"#{@data.creator.to_s.gsub('"', '\\"')}\")"),
+          GLib::Variant.parse("(uint32 #{@data.creator_id.to_i}, \"#{username}\", \"#{@data.creator.to_s.gsub('"', '\\"')}\")"),
         )
         true
       end

@@ -58,10 +58,20 @@ class ZoomPicture < Gtk::Widget
     queue_draw
   end
 
+  # Upstream's zoom-level is a GObject property, so its window listens with
+  # `notify::zoom-level`. `zoom_level` here is a plain Ruby attribute — a
+  # Ruby class picks up no GObject property merely by declaring an accessor,
+  # and `install_property` only binds a GValue a widget template or GSettings
+  # can reach, not an arbitrary float a setter like this one needs on every
+  # call — so ScreenshotView gets its own callback instead, upstream's signal
+  # with a method call standing in for the signal connection.
   def zoom_level=(value)
     @zoom_level = value.clamp(ZOOM_MIN, ZOOM_MAX)
     queue_draw
+    @on_zoom_changed&.call(@zoom_level)
   end
+
+  def on_zoom_changed(&block) = @on_zoom_changed = block
 
   def zoom_level_max = ZOOM_MAX
   def zoom_level_min = ZOOM_MIN

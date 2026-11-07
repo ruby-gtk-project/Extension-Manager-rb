@@ -14,7 +14,8 @@ require_relative 'zoom_picture'
 # The zoom-in/zoom-out/zoom-reset actions the buttons point at are upstream's
 # too, but upstream installs them on the window class, not this page, because
 # Ctrl+Plus/Minus/0 need to reach them from anywhere in the window — Window
-# installs that "screenshot" group and delegates to #zoom_in, #zoom_out and
+# installs them (as plain "win." actions; see its `zoom_in_action` for why
+# not upstream's own grouped prefix) and delegates to #zoom_in, #zoom_out and
 # #zoom_reset here; #notify_zoom_changed is what it calls on the
 # notify::zoom-level signal to keep the window's own action-enabled state in
 # step, which is upstream's notify_zoom.
@@ -45,7 +46,7 @@ class ScreenshotView < Adwaita::NavigationPage
       end
 
       picture_bin.child = zoom_picture.build.tap do |widget|
-        widget.signal_connect('notify::zoom-level') { @on_zoom_changed&.call(zoom_picture.zoom_level) }
+        widget.on_zoom_changed { |zoom_level| @on_zoom_changed&.call(zoom_level) }
       end
 
       button_box.tap do |box|
@@ -99,8 +100,8 @@ class ScreenshotView < Adwaita::NavigationPage
     end
   end
 
-  def zoom_out_button = @zoom_out_button ||= zoom_button('zoom-out-symbolic', ZOOM_OUT_TOOLTIP, 'screenshot.zoom-out')
-  def zoom_in_button = @zoom_in_button ||= zoom_button('zoom-in-symbolic', ZOOM_IN_TOOLTIP, 'screenshot.zoom-in')
+  def zoom_out_button = @zoom_out_button ||= zoom_button('zoom-out-symbolic', ZOOM_OUT_TOOLTIP, 'win.zoom-out')
+  def zoom_in_button = @zoom_in_button ||= zoom_button('zoom-in-symbolic', ZOOM_IN_TOOLTIP, 'win.zoom-in')
 
   private
 
