@@ -381,28 +381,6 @@ MyApp.new.build.run
 
 ---
 
-## GApplication's `open` Signal — Cannot Be Invoked From Ruby
-
-`Gio::Application#open(files, hint)` (the method) raises `NotImplementedError:
-TODO: in Ruby -> GIArgument(array/C)[interface(interface)](GFile)` — the
-bindings cannot marshal a Ruby array into the `GFile **files, gint n_files`
-pair the C signature needs. `signal_emit('open', files, n, hint)` does not
-raise but **segfaults** the process instead, for the same reason one level
-down.
-
-Connecting `app.signal_connect('open') { |app, files, hint| ... }` and
-building the app with `:handles_open` both work fine — a real `xdg-open
-gnome-extensions://...` invocation reaches the handler correctly, because
-that path is GLib constructing the array in C and marshalling it in,
-not Ruby constructing it and marshalling out. Only the Ruby-side call/emit
-direction is broken.
-
-Consequence for tests: a driver cannot exercise the vfunc through the real
-signal. Keep the signal handler a one-line dispatch to a separate (public or
-`send`-able) method, and drive that method directly with real `Gio::File`
-objects built via `Gio::File.new_for_uri` — that part of the Ruby bindings
-works fine and is where the actual URI-parsing logic under test lives.
-
 ## Adding New Widgets
 
 When you encounter a new Adwaita widget:
