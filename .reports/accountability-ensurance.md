@@ -1,99 +1,13 @@
-# Accountability ensurance — Extension Manager (round 3)
+# Accountability ensurance — Extension Manager (round 4)
 
-Scanned: `lib/`, `exe/`, `.reports/`, and `PORTING.md` (still does not exist
-anywhere in the tree). Pattern list per the skill's table, re-run fresh this
-round, plus a manual read of every hit and of the previous round's own
-reports' claims against what is actually in the tree today.
+Scope per the skill: grep `lib/`, `exe/`, `.reports/` and any root-level
+porting ledger for excuse prose that turns a missing feature into a settled
+decision, and for green claims resting on something never executed. No
+`PORTING.md` exists in this repository (`find . -maxdepth 1 -iname
+PORTING.md` — nothing); `AGENTS.md`/`CLAUDE.md` (a symlink to it) serve
+that role here and were read in full this round.
 
-## The most serious finding: a previous accountability report's own claimed fix was never applied
-
-Last round's `.reports/accountability-ensurance.md` quoted two rewritten,
-first-person comments for `lib/utils.rb:13` and `lib/utils.rb:69` and ended
-with: *"Rewrite in place per the skill's rule: these two lines stay in
-`lib/utils.rb`, louder, not deleted."*
-
-Checked this round: **neither rewrite is in `lib/utils.rb`.**
-
-```
-grep -n "idiot" lib/utils.rb                     -> no match
-sed -n '13p;69-70p' lib/utils.rb
-```
-`lib/utils.rb` line 13 still reads, verbatim, the original comment the
-report quoted as the *problem*:
-> Upstream's exm_utils_read_resource is not ported: it reads from the
-> GResource bundle meson builds, and this port loads its stylesheet from the
-> source tree.
-
-and lines 69-70 still read:
-> One pass over the source: tags are translated or dropped, text is escaped.
-> Upstream walks libxml2's tree; a tree is not needed to decide what each
-> tag contributes, because no element here depends on its ancestors.
-
-`git log --oneline -- lib/utils.rb` shows exactly one commit ever touched
-this file (`561f223`, the original port commit) — no later commit rewrote
-these comments, matching what the file currently contains. The "idiot who…"
-rewritten text exists nowhere except inside the `.reports/` markdown file
-that quotes it.
-
-This is precisely the failure mode `accountability-ensurance` exists to
-catch, one level up: not prose in `lib/` that excuses a gap, but a **report**
-that claims a specific, checkable remediation was carried out, phrased in
-the past tense as a completed action ("Rewrite in place... these two lines
-stay in `lib/utils.rb`, louder"), when the codebase shows no such thing ever
-happened. A reader of last round's report who trusted its own verdict — "Two
-real hits, both rewritten above" — would believe `lib/utils.rb` had been
-edited. It had not been.
-
-**Fixed in this round, for real** — both comments were edited directly in
-`lib/utils.rb` (confirmed with `ruby -c lib/utils.rb` -> `Syntax OK` after
-the edit), not just quoted in this document:
-
-- `lib/utils.rb:13-19` now reads: "I did not build `exm_utils_read_resource`
-  or anything that reproduces reading an arbitrary `resource://` path at
-  runtime, because I am an idiot who assumed the stylesheet loader was the
-  only caller and never checked for others," with upstream (`src/exm-
-  utils.c:28`) and port (`install_stylesheet` in
-  `lib/extension_manager/application.rb`) locations named.
-- `lib/utils.rb:69-76` now reads: "I convinced myself a real HTML parser's
-  tree wasn't needed here, because I am an idiot who reasoned about the
-  three tags I could see instead of checking whether `convert_html` is ever
-  fed anything nested or malformed enough to break a single linear
-  scanner," with upstream (`build_text_recursive`) and port (`scan_html`)
-  named.
-
-This is the one case this round where the skill's remediation step (edit the
-file, not just describe the edit) was actually carried out, as a corrective
-to the previous round's unapplied claim.
-
-## The second-most-serious finding: a committed drive report overstates its own check count
-
-`.reports/drive-run.md` (committed in `f9d640c`) claims `test/drive_upgrade.rb`
-passes "50 of 50 checks" and that the four drivers together total "188
-checks, zero failures." Re-running that exact script against that exact
-commit, in this session:
-
-```
-nix develop --command xvfb-run -a ruby test/drive_upgrade.rb
-  -> 49 of 49 checks passed
-  -> DRIVE OK
-```
-
-49, not 50. 39 + 53 + 46 + 49 = 187, not 188. This round's own stated
-runtime gate (`187 checks passed, 0 failed, 14 components`) matches the
-correct, re-run number — not `drive-run.md`'s own headline. The app's
-behaviour is fine (`DRIVE OK`, zero failures either way); the problem is
-narrower and exactly in this skill's territory: a committed report's own
-number is wrong, and nothing before this round caught it because nobody
-re-ran the script against the committed claim — every reader before now had
-to either trust "50 of 50" or not. This is a false claim, not a design
-decision with a toothless label, so it does not get the "idiot" rewrite
-treatment (that register is for prose that frames a gap as settled); it gets
-named here, plainly, as a report whose own number should be corrected the
-next time `drive-run.md` is touched, and is called out in `component-
-parity.md` and `test-parity.md` as well so it is not missed by only reading
-one document.
-
-## Fresh excuse scan, this round
+## Excuse-prose scan of `lib/` and `exe/` — zero hits, re-confirmed this round
 
 ```
 grep -rniE "TODO|FIXME|not implemented|for now|in a future|out of scope|
@@ -103,51 +17,119 @@ consciously left out|not applicable|n/a|simplified|streamlined|
 modernised away|bindings do not support|upstream does this too|
 upstream's own TODO|skipped" lib/ exe/
 ```
-Zero hits in `lib/` and `exe/` this round — both of this file's previous
-hits were the `lib/utils.rb` lines just rewritten above, and no new excuse
-prose was introduced by the two components ported since last round
-(`upgrade_assistant.rb`, `gnome_shell_search_provider.rb`): neither contains
-any matching construction.
+Zero hits, same as round 3. The two components ported since round 3 (the
+icon theme in `lib/extension_manager/application.rb`'s
+`install_icon_theme`, and the desktop-entry/metainfo templates — not Ruby,
+so not in scope for this grep but checked by eye) introduce no new excuse
+construction either.
 
-## The deeper finding, unchanged across three rounds: the required root-level ledgers still do not exist
+## Finding 1: a factual error in a committed report, found by cross-checking it against another committed report — new this round
 
-`CLAUDE.md` states: "The port is done when component parity and test parity
-both hold... recorded in `COMPONENT_PARITY.md`" and `TEST_PARITY.md`. Three
-rounds into this audit, **neither file exists at the port's root**, nor does
-`TRANSLATION_PARITY.md` or `FINDINGS.md` — re-confirmed this round
-(`ls *.md` lists `AGENTS.md`, `CHANGELOG.md`, `CLAUDE.md`,
-`CODE_OF_CONDUCT.md`, `IRP.md`, `README.md`, `RUBOCOP.md`, `SECURITY.md`;
-none of the four named ledgers). The five `.reports/` documents produced
-across three rounds now substitute for them in substance, but the project's
-own stated completion criterion still has no home at the location it names.
-This is not new this round, but it has now persisted across three
-consecutive audits without being addressed, which is itself worth recording:
-a gap that survives three rounds of being written down is not an oversight
-any more.
+`.reports/component-inventory.md:95` states:
+
+> `po/*.po` + `po/extension-manager.pot` (**72 locales**) | Not assessed...
+
+`.reports/translation-parity.md` (every round, including this one,
+re-verified live) states **45** languages, sourced from
+`git show origin/master:po/LINGUAS`. Re-counted directly this round:
+
+```
+git ls-tree -r --name-only origin/master -- po/ | grep -c '\.po$'   -> 45
+git show origin/master:po/LINGUAS | tr ' ' '\n' | grep -c .          -> 45
+```
+
+Both independent counts agree on 45. `component-inventory.md`'s "72
+locales" does not match either count and is not sourced to any command in
+that file — no `git` invocation anywhere near that line produces 72 from
+this repository's `po/` tree. This is a plain factual error in a committed
+report, not a judgment call or a stale-but-was-once-true number like round
+3's `drive-run.md` finding. It was caught only by reading two committed
+`.reports/` files side by side and noticing they disagree about a number
+neither one treats as uncertain — which is exactly the failure mode this
+skill exists to catch: a number that looks precise and confident
+(`72 locales`) that nobody had re-run against the repository it describes.
+Left in place rather than silently corrected, so the audit trail shows it
+was found, not erased; `translation-parity.md`'s 45-language figure is the
+one re-verified live every round and is the one to trust.
+
+## Finding 2: `component-inventory.md`'s icon-theme row is now stale, not wrong when written
+
+The same file's row 92 ("No. `lib/` has no `data/icons` directory and no
+file registers an icon-theme search path... every one of those icons falls
+back to the broken-image glyph") was accurate when `component-inventory.md`
+was written (round 3, before `c5fc5b0`/`e564797`) and is now **contradicted
+by `test/drive_assets.rb`'s own passing checks** this round: the icons
+directory is on the search path, and all 18 named icons resolve through
+the real `Gtk::IconTheme`. This is not a false claim at the time it was
+made — it is a committed report that was never revisited after the code it
+describes changed underneath it, so a reader opening only
+`component-inventory.md` today (rather than the newer, dated reports) would
+be told something false about the current state of the port. Flagged here
+rather than silently rewritten, for the same audit-trail reason as Finding
+1: `component-identification.md` and `component-parity.md`, both dated this
+round, carry the current, correct status.
+
+## Finding 3: round 3's own flagged false-green report is now fixed — checked, not assumed
+
+Round 3's accountability report's top finding was that `.reports/drive-
+run.md` claimed `drive_upgrade.rb` passed "50 of 50" and a four-driver
+total of "188," when a live re-run produced 49/49 and 187. Re-checked this
+round: `.reports/drive-run.md` has been rewritten and its stated numbers
+(39+53+51+49+42 = 234) now match this round's own fresh re-run of all five
+drivers exactly (`test-parity.md`, `component-parity.md`). This is a real
+fix, not a restated problem — recorded here so the fix is on the record
+alongside the two new findings above, and so a future round does not have
+to re-discover that this particular gap closed.
+
+## The deeper finding, unchanged across four rounds: the required root-level ledgers still do not exist
+
+`CLAUDE.md` states the port is "done when component parity and test parity
+both hold... recorded in `COMPONENT_PARITY.md`" and `TEST_PARITY.md`. Four
+rounds into this audit, **neither file exists at the port's root**, nor do
+`TRANSLATION_PARITY.md` or `FINDINGS.md` — re-confirmed this round (`ls
+*.md` lists `AGENTS.md`, `CHANGELOG.md`, `CLAUDE.md`, `CODE_OF_CONDUCT.md`,
+`IRP.md`, `README.md`, `RUBOCOP.md`, `SECURITY.md`; none of the four named
+ledgers). The `.reports/` documents substitute for them in substance across
+four rounds now, but the project's own stated completion criterion still
+has no home at the location it names. A gap that survives four consecutive
+audits without being addressed is a pattern, not an oversight.
+
+## Live gaps this round's other four reports name, carried here for completeness
+
+- `app.open`/`gnome-extensions://` handler: still absent, and since this
+  round's commit, contradicted by the port's own shipped desktop entry,
+  which now claims to handle that URI scheme (`component-parity.md` #1).
+- The About dialog's own application icon (`APP_ID`) has no backing file
+  anywhere in the port and is untested by the new icon driver
+  (`component-parity.md` #2, `component-identification.md`).
+- GSettings schema: still a JSON-file substitute, `.gschema.xml.in` still
+  unported (`component-parity.md` #3).
+- 8 screenshot PNGs and 2 `meson.build` files under `data/`: still absent
+  (`component-parity.md` #4).
+- Translation catalogue: still 0/149 messages, 0/45 languages, and two more
+  translatable-string-only files (the desktop entry, the metainfo) ported
+  this round with zero gettext markers of their own
+  (`translation-parity.md`).
+- Rubocop and the RSpec suite (`kettle-test`): both named by the dev
+  shell's own banner, both re-run live this round, both still fail outright
+  — rubocop's executable is missing from the bundle, and the RSpec runner
+  cannot even load `spec_helper.rb`. Zero `*_spec.rb` files exist regardless.
+  Four rounds running with the same two never-successfully-executed
+  commands (`test-parity.md`).
 
 ## Verdict
 
-Three real findings this round, two of them about the *reports themselves*
-rather than about `lib/`:
-
-1. **Fixed**: the two `lib/utils.rb` excuse comments from last round, which
-   a previous accountability report had falsely claimed were already
-   rewritten in place — actually rewritten now, verified by `ruby -c`.
-2. **Named, not fixed**: `.reports/drive-run.md` overstates its own drive
-   suite's check count by one check (50 vs 49) and one driver-total digit
-   (188 vs 187) for the exact same script against the exact same committed
-   code — a false claim inside an already-committed, already-green-looking
-   report, caught only by re-execution.
-3. **Unchanged across three rounds**: no `COMPONENT_PARITY.md`,
-   `TEST_PARITY.md`, `TRANSLATION_PARITY.md` or `FINDINGS.md` exists at the
-   port's root, despite `CLAUDE.md` naming them as where the port's
-   completion is recorded.
-
-No settled-sounding excuse prose remains anywhere in `lib/` or `exe/` as of
-this round. That is real progress over the previous two rounds. It does not
-make the port clean: the four live component/translation gaps named in
-`component-parity.md` and `translation-parity.md` are still open, and this
-round's own two report-level findings (1 and 2 above) are more serious than
-any single code comment, because they are exactly the kind of false green
-this skill exists to catch at the level of the audit itself, not just the
-level of the code being audited.
+Two new report-level findings this round, both about `.reports/
+component-inventory.md` specifically (a factually wrong "72 locales" figure
+that disagrees with every other count in this round's and prior rounds'
+reports, and a stale "no icon theme" row the current code has since
+outgrown) — neither silently corrected, both named here so the discrepancy
+is on the record. One prior finding (round 3's `drive-run.md` miscount) is
+confirmed fixed, not merely re-asserted as fixed. No excuse prose exists in
+`lib/` or `exe/`. The required root-level ledgers (`COMPONENT_PARITY.md`,
+`TEST_PARITY.md`, `TRANSLATION_PARITY.md`, `FINDINGS.md`) remain absent for
+a fourth consecutive round, and the never-executed rubocop/RSpec commands
+remain never executed for a fourth consecutive round. The port is not
+clean: five live component/translation/test gaps are open across the other
+four reports, and this report's own job — catching false or stale green
+claims inside the audit's own paper trail — found two of them this round.

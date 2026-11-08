@@ -1,127 +1,132 @@
-# Component parity — Extension Manager (round 3)
+# Component parity — Extension Manager (round 4)
 
 | | |
 |---|---|
-| Upstream | `origin/master` (`origin/main` does not exist in this clone) |
-| Port | `ruby` @ `f9d640c` |
+| Upstream | `origin/master` |
+| Port | `ruby` @ `e564797` |
 | Units with parity | not all — see below |
 
 No `COMPONENT_PARITY.md` exists at the port's root. `CLAUDE.md` names that
-file as where this is supposed to be "recorded" for the port to be
-considered done; it still is not there, only under `.reports/`. Flagged again
-here and in `accountability-ensurance.md`.
+file as where the port's component parity is "recorded" for the port to be
+considered done; it still is not there, only under `.reports/`. Carried
+again into `accountability-ensurance.md` — this is now its fourth
+consecutive round open.
 
-## Previous round's two top gaps: now closed
+## Since round 3: icon theme, desktop entry and metainfo ported, and driven
 
-1. **`win.show-upgrade-assistant` now works.** `lib/window.rb:384-386`
-   installs the action and connects it to `show_upgrade_assistant`
-   (`lib/window.rb:695`), which builds a fresh `UpgradeAssistant` dialog each
-   time, matching upstream's `show_upgrade_assistant_cb`. Verified by
-   `test/drive_upgrade.rb`'s dialog-construction, version-dropdown,
-   compatibility-check and clipboard-report checks, re-run this round (49 of
-   49 pass).
-2. **The GNOME Shell search provider is now exported.**
-   `lib/extension_manager/application.rb` installs `dbus_register`/
-   `dbus_unregister`-equivalent hooks (`startup`/`shutdown` signal handlers
-   calling `export_search_provider`/`search_provider.unexport`,
-   `lib/extension_manager/application.rb:46-47, 147-149`), and
-   `lib/gnome_shell_search_provider.rb` implements `matching_uuids`,
-   `GetInitialResultSet`, `GetSubsearchResultSet`, `GetResultMetas`,
-   `ActivateResult` and `LaunchSearch`. Verified by `test/drive_upgrade.rb`.
+`c5fc5b0` ported `Application#install_icon_theme` plus
+`data/*.desktop.in.in`/`*.metainfo.xml.in.in` and 18 symbolic SVGs;
+`e564797` added `test/drive_assets.rb` to actually exercise them. Re-run
+live this round, not trusted from the commit message:
 
-## Gaps still open, re-verified this round
+```
+nix develop --command xvfb-run -a ruby test/drive_assets.rb
+  -> 42 of 42 checks passed, DRIVE OK
+```
 
-### 1. `app.open` / the `gnome-extensions://` URI scheme — unchanged, still absent
+The driver confirms, against the real `Gtk::IconTheme`: the icons directory
+is really on the search path; all 18 shipped action-glyph names resolve;
+the 16 of those names any widget in `lib/` actually sets are a subset of
+what resolves; a real `Gtk::Image` built from one of them (`puzzle-piece-
+symbolic`) paints a paintable backed by the port's own file, not a system
+fallback; the desktop-entry and metainfo templates parse with the right
+shape and substitute the real `APP_ID` correctly. This is a genuine,
+non-trivial parity gain — the previous two rounds' "no icon of any kind"
+finding is now **mostly** closed, not just file-present.
+
+## Gaps still open, re-verified this round (not copied from round 3's text)
+
+### 1. `app.open` / the `gnome-extensions://` URI scheme — still absent, now contradicted by the port's own shipped desktop entry
 
 `grep -n "def open\b" lib/extension_manager/application.rb` and `grep -rn
-"gnome-extensions" lib/ exe/` both still return nothing. Upstream's
-`exm_application_open` override is the thing that lets any system link of
-the form `gnome-extensions://<uuid>` open this app directly to that
-extension's detail page (`win.show-detail`); the search-provider commit
-added the D-Bus export path but did not touch this. The search provider's
-own `ActivateResult`/`LaunchSearch` go through the window's actions
-directly rather than through `open`, so the search provider working does
-not imply this does. This is unchanged from last round and is a distinct,
-still-open gap.
+"gnome-extensions" lib/ exe/` both still return nothing — unchanged from
+every prior round. But the desktop-entry template this round's commit
+shipped (`data/com.mattjakeman.ExtensionManager.desktop.in.in`) declares
+`MimeType=x-scheme-handler/gnome-extensions;`, and `test/drive_assets.rb`
+checks and confirms that line is present. So the port's own packaging
+metadata now asserts it is the default handler for `gnome-extensions://`
+links, while the application code that would do anything when the desktop
+environment hands it such a URI (`exm_application_open` upstream,
+`win.show-detail` downstream of it) still does not exist anywhere in
+`lib/` or `exe/`. This is a new and sharper form of the same long-standing
+gap: a real user double-clicking a `gnome-extensions://<uuid>` link on a
+system where this desktop file is installed would have the link routed to
+this app (because the `.desktop` file says to) and then nothing would
+happen, because there is no handler.
 
-### 2. Settings diverge from GSettings to a JSON file — unchanged correspondence
+### 2. The application's own icon is unshippable, unported, and untested — new finding this round
+
+`lib/extension_manager/application.rb:176` sets `dialog.application_icon =
+APP_ID` (`com.mattjakeman.ExtensionManager`) for the About dialog. Upstream
+ships that icon as `data/icons/com.mattjakeman.ExtensionManager.svg` (plus
+`.Devel.svg`, `.Source.svg`, `-symbolic.svg` variants) at the top level of
+`data/icons/`, separately from the 18 action glyphs under
+`data/icons/hicolor/scalable/actions/` this round actually ported. None of
+the four app-icon files exist in the port (`find data/icons -maxdepth 1
+-type f` — nothing). `Application::ICONS_DIR` is added to the icon theme's
+search path, so if the file existed there it would very likely resolve the
+same way the 18 action glyphs now do — but it doesn't exist, so it can't.
+`test/drive_assets.rb`'s icon-resolution checks only cover the 18 action
+names (`CUSTOM_ICON_NAMES`/`WIRED_ICON_NAMES`); `APP_ID` is referenced in
+the same file only as the string substituted into the desktop entry and
+metainfo, never as an icon-theme lookup target. The About dialog's own
+application icon is a real, untested, user-visible gap that the new driver
+does not catch because it was not asked to.
+
+### 3. GSettings schema — unchanged correspondence, unchanged gap
 
 `lib/settings.rb` still keeps upstream's four keys (`width`, `height`,
-`is-maximized`, `sort-enabled-first`) and defaults, backed by a JSON file
-under `XDG_CONFIG_HOME` instead of a compiled GSettings schema. Filed as a
-correspondence, not a fresh gap, per the previous round's reasoning — but
-the underlying `.gschema.xml.in` file is still unported (see
-`component-identification.md`), so `gsettings` CLI/GNOME Settings
-integration against this app's keys still does not work.
+`is-maximized`, `sort-enabled-first`) and defaults, backed by a hand-rolled
+JSON file under `XDG_CONFIG_HOME` rather than a compiled GSettings schema.
+`data/com.mattjakeman.ExtensionManager.gschema.xml.in` is still unported
+(`find data -iname "*gschema*"` — nothing), so `gsettings` CLI / GNOME
+Settings integration against this app's keys still does not work, exactly
+as every prior round found.
 
-### 3. The `data/` tree is 28 of 30 files short — unchanged, worse than previously stated
+### 4. `data/` tree — improved from 2/37 to 22/37, two meson.build files and 8 screenshots still absent
 
-Last round's report said "no `data/` tree at all," which undercounted: two
-files (`search-provider.ini.in`, `service.in`) now exist, added for the
-search-provider commit. Still missing, re-confirmed this round: the desktop
-entry, the metainfo, the GSettings schema, both meson.build files, and —
-not named with this specificity before — **all 16 icon files**, including
-the application's own icon. `install_stylesheet` in
-`lib/extension_manager/application.rb` loads `lib/style.css` directly from
-the gem's source tree rather than any resource bundle, so the app has a
-stylesheet; it has no icon of its own at all. Running the app
-(`test/drive_*.rb` builds real widgets) does not surface this because none
-of the drivers check that an icon name actually resolves to pixels — a
-`Gtk::Image` with an unresolvable icon name degrades silently. See
-`component-identification.md`'s new finding naming the five specific icon
-names the port's own code (`upgrade_assistant.rb`, `detail_view.rb`,
-`extension_row.rb`, `versions_dialog.rb`) references that this port supplies
-none of the backing files for.
+Beyond items 2 and 3 above: upstream's two `meson.build` files under
+`data/` (not meaningful for a Bundler/RubyGems port, carried for
+completeness) and all 8 screenshot PNGs the metainfo's `<screenshot>`
+elements and the README reference are still absent. `test/drive_assets.rb`
+checks that the metainfo template *names* at least one `<screenshot>`
+element; it does not — and could not, since none exist — check that the
+referenced image resolves to a real file.
 
-### 4. Translation catalogue — unchanged, still 0/149
+### 5. Translation catalogue — unchanged, still 0/149
 
-See `translation-parity.md`. No change this round.
+See `translation-parity.md`. No change this round; the two components
+ported since round 3 (icon theme, desktop entry, metainfo) add zero
+gettext markers, same pattern as `upgrade_assistant.rb` and
+`gnome_shell_search_provider.rb` before them.
 
-## A new, narrower finding this round: `drive-run.md` overstates its own check count
+## A check on round 3's flagged report-accuracy problem: fixed this round
 
-`.reports/drive-run.md` (committed, not re-verified by a fresh execution
-until this round) claims `test/drive_upgrade.rb` passes "50 of 50 checks" and
-that the four drivers together total "188 checks". Actually re-running all
-four drivers this round:
+Round 3 found `drive-run.md` overstated `drive_upgrade.rb`'s count (claimed
+50/50, actually 49/49) and the four-driver total (claimed 188, actually
+187). This round's `.reports/drive-run.md` has been rewritten and now
+states 39+53+51+49+42 = 234, matching this round's own fresh re-run of all
+five drivers exactly (see below and `test-parity.md`). The false-green
+report problem round 3 found is corrected, not merely re-asserted.
 
 ```
-test/drive_installed.rb -> 39 of 39 checks passed, DRIVE OK
-test/drive_browse.rb    -> 53 of 53 checks passed, DRIVE OK
-test/drive_detail.rb    -> 46 of 46 checks passed, DRIVE OK
-test/drive_upgrade.rb   -> 49 of 49 checks passed, DRIVE OK   (drive-run.md claims 50)
+nix develop --command xvfb-run -a ruby test/drive_installed.rb  -> 39 of 39, DRIVE OK
+nix develop --command xvfb-run -a ruby test/drive_browse.rb     -> 53 of 53, DRIVE OK
+nix develop --command xvfb-run -a ruby test/drive_detail.rb     -> 51 of 51, DRIVE OK
+nix develop --command xvfb-run -a ruby test/drive_upgrade.rb    -> 49 of 49, DRIVE OK
+nix develop --command xvfb-run -a ruby test/drive_assets.rb     -> 42 of 42, DRIVE OK
 ```
-39 + 53 + 46 + 49 = **187**, matching this round's stated runtime gate
-(187 checks, 14 components) exactly — not the 188 `drive-run.md` claims. The
-discrepancy is a stale/miscounted number in a committed report, not a
-regression in the app: the app's actual behaviour (187/187, `DRIVE OK`) is
-fine. But a report that states a check count one higher than what the
-script, run today on the same code, actually produces is exactly the kind of
-unverified green claim `accountability-ensurance.md` is supposed to catch.
-Flagged there as well.
-
-## What this pass did **not** check (said plainly, not implied)
-
-- No GIR-backed per-widget count/style/behaviour/text table was built against
-  the ten files added in the two most recent commits
-  (`upgrade_assistant.rb`, `gnome_shell_search_provider.rb`, plus the earlier
-  detail-view batch). The drive scripts exercise behaviour, which is
-  evidence, but is not a widget-by-widget count audit.
-- The stylesheet diff (`src/style.css` vs `lib/style.css`) was not run this
-  round either.
-- Icon-name resolution was checked by grep for reference, not by actually
-  loading each referenced icon name through a `Gtk::IconTheme` lookup at
-  runtime — the "degrades silently" claim above is from reading GTK's
-  documented fallback behaviour for unresolvable themed icon names, not from
-  observing a broken-image render in this sandbox.
+39+53+51+49+42 = 234, zero failures — matches this round's stated runtime
+gate exactly, reproduced by execution in this session, not read off a
+committed file.
 
 ## Verdict
 
-**Not clean.** The two gaps closed this round (`upgrade_assistant`, the
-search provider) are real and verified by driving them. Four gaps remain
-open and unchanged in substance: `app.open`/URI scheme, the GSettings→JSON
-correspondence (filed, not excused, but still a real divergence), the
-`data/` tree (28 of 30 files, including every icon), and the entire
-translation catalogue. One new finding: a committed report
-(`drive-run.md`) overstates the drive suite's own check count by one check
-and one driver-total digit, caught only by re-running the suite rather than
-trusting the file.
+Real progress this round: the icon theme, desktop entry and metainfo are
+now ported and driven, and the previous round's report-accuracy problem is
+fixed. Five gaps remain open, two of them (the About dialog's own app icon,
+and the desktop entry now claiming a URI-scheme handler the app still
+doesn't implement) newly sharpened by this round's own work rather than
+unchanged holdovers. None of these five gaps is exercised by any passing
+check in the 234-check gate — the gate's shape is "what was driven passed,"
+not "nothing is missing."
