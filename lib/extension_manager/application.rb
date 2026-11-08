@@ -2,6 +2,7 @@
 
 require 'gtk4'
 require 'adwaita'
+require 'uri'
 
 require_relative '../gnome_shell_search_provider'
 require_relative '../manager'
@@ -54,19 +55,12 @@ module ExtensionManager
         # provider's win.launch-search while the window already exists —
         # upstream's own activate handler is the same single-shot build, run
         # once and then just re-presenting the existing window after.
-        app.signal_connect('activate') do
-          if @window_built
-            window.present
-          else
-            @window_built = true
-            install_stylesheet
-            install_icon_theme
-            app.add_window(window)
-            window.build
-            manager.connect
-            window.present
-          end
-        end
+        app.signal_connect('activate') { on_activate }
+        # Ported from upstream's exm_application_open: the vfunc GApplication
+        # calls for files handed to it (here, gnome-extensions:// URIs from
+        # xdg-open / the browser's "Install" button), which :handles_open
+        # above opts this application into receiving.
+        app.signal_connect('open') { |_app, files, _hint| on_open(files) }
 
         install_app_actions
         install_accels
@@ -75,7 +69,9 @@ module ExtensionManager
 
     # Adwaita::Application is broken in the Ruby bindings; the application
     # object comes from Gtk and only the window and its contents are Adwaita.
-    def app = @app ||= Gtk::Application.new(APP_ID, :default_flags)
+    # :handles_open is upstream's G_APPLICATION_HANDLES_OPEN flag, needed for
+    # the 'open' signal below to ever fire.
+    def app = @app ||= Gtk::Application.new(APP_ID, :handles_open)
 
     def manager = @manager ||= Manager.new
 
@@ -130,6 +126,40 @@ module ExtensionManager
     end
 
     private
+
+      def on_activate
+        if @window_built
+          window.present
+        else
+          @window_built = true
+          install_stylesheet
+          install_icon_theme
+          app.add_window(window)
+          window.build
+          manager.connect
+          window.present
+        end
+      end
+
+      # Ported from upstream's exm_application_open. GApplication passes a
+      # GFile per URI handed to the app (xdg-open, or extensions.gnome.org's
+      # "Install" button, both use gnome-extensions://<uuid>). Upstream
+      # dismisses any open dialog first; the Ruby port's win.show-detail
+      # already replaces whatever page is showing, so that step is implicit
+      # here.
+      def on_open(files)
+        on_activate
+        files.first&.then do |file|
+          uri = URI.parse(file.uri)
+          if uri.scheme == 'gnome-extensions'
+            window.activate_action('show-detail', GLib::Variant.new(URI.decode_www_form_component(uri.host)))
+          else
+            warn "Invalid URI scheme: '#{uri.scheme}'"
+          end
+        end
+      rescue URI::InvalidURIError => e
+        warn "Error parsing URI: #{e.message}"
+      end
 
       def install_app_actions
         app.add_action(quit_action)

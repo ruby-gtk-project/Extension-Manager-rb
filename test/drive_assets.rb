@@ -85,6 +85,32 @@ GtkDriver.drive(app, shots: 'tmp/shots') do |d, application|
     end
   end
 
+  d.step('the app\'s own icon (not just the 18 action glyphs) resolves in the theme') do
+    # The About dialog sets dialog.application_icon = APP_ID, and the
+    # .desktop/.metainfo templates' Icon/@app_id@ token resolves the same
+    # name — upstream ships it as data/icons/com.mattjakeman.ExtensionManager
+    # {.svg,-symbolic.svg} installed into hicolor's scalable/apps and
+    # symbolic/apps. A driver that only ever checked the 18 action glyphs
+    # would stay green even if the app's own icon file never existed.
+    Gtk::IconTheme.get_for_display(Gdk::Display.default).then do |theme|
+      app_id = ExtensionManager::Application::APP_ID
+      d.check('the theme resolves the app id as an icon name') { theme.has_icon?(app_id) }
+      theme.lookup_icon(app_id, 48).then do |paintable|
+        d.check('it resolves to a real paintable') { !paintable.nil? }
+        d.check('it is backed by this port\'s own scalable/apps SVG, not a system fallback') do
+          paintable.file&.path.to_s == File.join(
+            ExtensionManager::Application::ICONS_DIR, 'hicolor/scalable/apps', "#{app_id}.svg"
+          )
+        end
+      end
+      d.check('the symbolic variant also resolves to this port\'s own file') do
+        theme.lookup_icon("#{app_id}-symbolic", 16).file&.path.to_s == File.join(
+          ExtensionManager::Application::ICONS_DIR, 'hicolor/symbolic/apps', "#{app_id}-symbolic.svg"
+        )
+      end
+    end
+  end
+
   d.step('the desktop entry template parses as upstream\'s desktop file shape') do
     File.read(File.expand_path('../data/com.mattjakeman.ExtensionManager.desktop.in.in', __dir__))
         .then do |text|
@@ -147,6 +173,17 @@ GtkDriver.drive(app, shots: 'tmp/shots') do |d, application|
         text.include?('<project_license>GPL-3.0-or-later</project_license>')
       end
       d.check('it names at least one screenshot') { text.include?('<screenshot ') }
+      # Upstream's own metainfo points <image> at raw.githubusercontent.com
+      # URLs (AppStream screenshots are meant to be fetched remotely, not
+      # bundled), which this template matches verbatim. The filenames those
+      # URLs name still exist in upstream's own data/ directory for the
+      # repo's own README/tooling, so the port carries the same 8 PNGs
+      # rather than silently dropping files upstream ships.
+      screenshot_files = text.scan(%r{/data/(screenshot-[\w-]+\.png)}).flatten
+      d.check('the metainfo names at least 4 screenshot files') { screenshot_files.size >= 4 }
+      d.check('every named screenshot file exists in data/') do
+        screenshot_files.all? { |name| File.exist?(File.expand_path("../data/#{name}", __dir__)) }
+      end
     end
   end
 

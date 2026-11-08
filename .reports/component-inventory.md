@@ -1,5 +1,14 @@
 # Component inventory — Extension Manager (Ruby port)
 
+> **Historical / superseded.** This snapshot predates the icon theme,
+> desktop entry, metainfo, app-icon, screenshot and GSettings work landed in
+> later rounds, and its "72 locales" figure below was never correct (the
+> independently and repeatedly verified count, from both `git ls-tree` and
+> `po/LINGUAS`, is 45 — see `.reports/translation-parity.md`). Read
+> `.reports/component-identification.md` and `.reports/component-parity.md`
+> for the current picture; the rows below are left as originally written,
+> for the historical record, rather than silently edited.
+
 Surveyed `ruby` branch (HEAD at the time of this report) against upstream
 `origin/master`. Scope: every user-facing component — windows, dialogs,
 pages, rows, menus, keyboard shortcuts, settings, actions, empty/error

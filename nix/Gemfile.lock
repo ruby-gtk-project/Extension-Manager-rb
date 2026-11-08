@@ -67,6 +67,7 @@ PLATFORMS
 
 DEPENDENCIES
   adwaita
+  gio2
   glib2
   glycin
   gtk4

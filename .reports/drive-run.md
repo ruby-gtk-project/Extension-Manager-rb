@@ -3,7 +3,46 @@
 Produced with the `ruby-gtk-testing` skill in `.claude/skills/`, driving the
 real app headlessly under `nix develop --command xvfb-run -a ruby test/drive_*.rb`.
 
-## Result (this run, after the icons/desktop-entry/metainfo commit)
+## Result (round 5: app.open, app icon, GSettings)
+
+Re-run fresh this round against the code actually on disk, all seven drive
+scripts end in `DRIVE OK`:
+
+- `test/drive_installed.rb` — 39 of 39 checks passed
+- `test/drive_browse.rb` — 53 of 53 checks passed
+- `test/drive_detail.rb` — 51 of 51 checks passed
+- `test/drive_upgrade.rb` — 49 of 49 checks passed
+- `test/drive_assets.rb` — 48 of 48 checks passed (up from 42: added the
+  app's own icon resolving through `Gtk::IconTheme` under both its
+  `hicolor/scalable/apps` and `hicolor/symbolic/apps` names, plus a check
+  that every screenshot filename the metainfo template names actually
+  exists under `data/`)
+- `test/drive_open_uri.rb` (new) — 4 of 4 checks passed: exercises
+  `Application#on_open`, the port's app.open override for
+  `gnome-extensions://<uuid>` URIs, with real `Gio::File` objects
+- `test/drive_settings.rb` (new) — 8 of 8 checks passed: exercises
+  `lib/settings.rb`'s real `Gio::Settings` backing (not the JSON
+  fallback), including a round-trip through an independent
+  `Gio::Settings` handle and a real `changed` signal firing `#watch`
+
+252 checks total, zero failures, zero errored steps.
+
+### `Gio::Application#open` cannot be driven through the real signal
+
+`Gio::Application#open(files, hint)` raises `NotImplementedError` from the
+Ruby bindings (cannot marshal an array of `GFile` out to C), and
+`signal_emit('open', files, n, hint)` segfaults the process for the same
+underlying reason. A real `xdg-open gnome-extensions://...` invocation
+reaches the vfunc correctly — only the Ruby-side call/emit direction is
+broken. `test/drive_open_uri.rb` therefore calls
+`Application#on_open` directly (via `send`, since it is the private method
+the `open` signal handler dispatches to) with real `Gio::File` objects
+built via `Gio::File.new_for_uri`, which exercises everything downstream of
+the broken marshalling: URI parsing, scheme validation and the
+`win.show-detail` action activation. Documented in
+`.claude/skills/ruby-gtk/references/adwaita-quirks.md` for the next round.
+
+## Result (previous round, after the icons/desktop-entry/metainfo commit)
 
 Re-run fresh this round, not taken on faith from the previous entry below:
 all five drive scripts end in `DRIVE OK`, re-run individually and verbatim:
